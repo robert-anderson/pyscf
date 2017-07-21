@@ -16,6 +16,7 @@ from pyscf import fci
 from pyscf.mcscf import mc_ao2mo
 from pyscf import ao2mo
 from pyscf.ao2mo import _ao2mo
+from pyscf import fciqmcscf
 
 libmc = lib.load_library('libmcscf')
 
@@ -658,13 +659,19 @@ class NEVPT(lib.StreamObject):
         if (not self.canonicalized):
             self.mo_coeff,_, self.mo_energy = self.canonicalize(self.mo_coeff,ci=self.load_ci(),verbose=self.verbose)
 
+        dm4 = None
+
         if hasattr(self.fcisolver, 'nevpt_intermediate'):
             logger.info(self, 'DMRG-NEVPT')
             dm1, dm2, dm3 = self.fcisolver._make_dm123(self.load_ci(),self.ncas,self.nelecas,None)
+        elif self.fcisolver.__class__ is fciqmcscf.FCIQMCCI:
+            dm2 = self.fcisolver.read_neci_two_pdm(self, 'spinfree_TwoRDM.1', self.ncas)
+            dm1 = fciqmcscf.one_from_two_pdm(dm2, self.nelecas)
+            dm3 = self.fcisolver.read_neci_three_pdm(self, 'spinfree_ThreeRDM.1', self.ncas)
+            dm4 = self.fcisolver.read_neci_four_pdm(self, 'spinfree_FourRDM.1', self.ncas)
         else:
             dm1, dm2, dm3 = fci.rdm.make_dm123('FCI3pdm_kern_sf',
                                                self.load_ci(), self.load_ci(), self.ncas, self.nelecas)
-        dm4 = None
 
         dms = {'1': dm1, '2': dm2, '3': dm3, '4': dm4,
                #'h1': hdm1, 'h2': hdm2, 'h3': hdm3
@@ -679,10 +686,30 @@ class NEVPT(lib.StreamObject):
             link_indexa = fci.cistring.gen_linkstr_index(range(self.ncas), self.nelecas[0])
             link_indexb = fci.cistring.gen_linkstr_index(range(self.ncas), self.nelecas[1])
             aaaa = eris['ppaa'][self.ncore:nocc,self.ncore:nocc].copy()
-            f3ca = _contract4pdm('NEVPTkern_cedf_aedf', aaaa, self.load_ci(), self.ncas,
-                                 self.nelecas, (link_indexa,link_indexb))
-            f3ac = _contract4pdm('NEVPTkern_aedf_ecdf', aaaa, self.load_ci(), self.ncas,
-                                 self.nelecas, (link_indexa,link_indexb))
+
+            if self.fcisolver.__class__ is fciqmcscf.FCIQMCCI:
+                # in this case we don't have the CI vector so we have to put the intermediates
+                # together ourselves
+
+                # numpy.einsum('ijka,rpqbjcik->pqrabc', h2e, dm4)
+                #   equals
+                # f3ac.transpose(1,2,0,4,3,5) # c'a'b'bac -> a'b'c'abc
+                #   i.e.
+                f3ac = numpy.einsum('ijka,rpqbjcik->pqrabc', h2e, dm4).transpose(2,0,3,5,1,4)
+
+                # likewise:
+                # numpy.einsum('kcij,rpqbajki->pqrabc', h2e, dm4)
+                #   equals
+                # f3ca.transpose(1,2,0,4,3,5) # c'a'b'bac -> a'b'c'abc
+                #   i.e.
+                f3ca = numpy.einsum('kcij,rpqbajki->pqrabc', h2e, dm4).transpose(2,0,3,5,1,4)
+
+            else:
+                f3ca = _contract4pdm('NEVPTkern_cedf_aedf', aaaa, self.load_ci(), self.ncas,
+                                     self.nelecas, (link_indexa,link_indexb))
+                f3ac = _contract4pdm('NEVPTkern_aedf_ecdf', aaaa, self.load_ci(), self.ncas,
+                                     self.nelecas, (link_indexa,link_indexb))
+
             dms['f3ca'] = f3ca
             dms['f3ac'] = f3ac
         time1 = log.timer('eri-4pdm contraction', *time1)
