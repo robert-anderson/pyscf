@@ -695,14 +695,14 @@ class NEVPT(lib.StreamObject):
                 #   equals
                 # f3ac.transpose(1,2,0,4,3,5) # c'a'b'bac -> a'b'c'abc
                 #   i.e.
-                f3ac = numpy.einsum('ijka,rpqbjcik->pqrabc', h2e, dm4).transpose(2,0,3,5,1,4)
+                f3ac = numpy.einsum('ijka,rpqbjcik->pqrabc', h2e, dm4).transpose(2,0,1,4,3,5)
 
                 # likewise:
                 # numpy.einsum('kcij,rpqbajki->pqrabc', h2e, dm4)
                 #   equals
                 # f3ca.transpose(1,2,0,4,3,5) # c'a'b'bac -> a'b'c'abc
                 #   i.e.
-                f3ca = numpy.einsum('kcij,rpqbajki->pqrabc', h2e, dm4).transpose(2,0,3,5,1,4)
+                f3ca = numpy.einsum('kcij,rpqbajki->pqrabc', h2e, dm4).transpose(2,0,1,4,3,5)
 
             else:
                 f3ca = _contract4pdm('NEVPTkern_cedf_aedf', aaaa, self.load_ci(), self.ncas,
