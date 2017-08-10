@@ -13,7 +13,7 @@ import pyscf.ao2mo
 import pyscf.symm
 import pyscf.fci
 import pyscf.symm.param as param
-from subprocess import call
+from subprocess import call, Popen, PIPE
 
 try:
     from pyscf.fciqmcscf import settings
@@ -96,6 +96,7 @@ class FCIQMCCI(object):
         self.system_options = ''
         self.calc_options = ''
         self.logging_options = ''
+        self.nroots = 1
 
         if mol.symmetry:
             self.groupname = mol.groupname
@@ -641,7 +642,6 @@ def write_fciqmc_config_file(fciqmcci, neleca, nelecb, restart, tUHF=False):
     f.write('write-spin-free-rdm\n')
     if fciqmcci.calc_exact_states:
         f.write('exactrdm\n')
-        f.write('bagelrdm\n')
     if fciqmcci.hbrdm_rank==3:
         f.write('three-body-rdm\n')
     elif fciqmcci.hbrdm_rank==4:
@@ -716,7 +716,13 @@ def execute_fciqmc(fciqmcci):
         except:
             input("Press Enter to continue with calculation...")
     else:
-        call("%s  %s > %s" % (fciqmcci.executable, in_file, out_file), shell=True)
+        print "starting neci"
+        #call("%s  %s > %s" % (fciqmcci.executable, in_file, out_file), shell=True)
+        print ['/home/robert/Projects/neci_rdm/build/bin/neci', in_file]
+        with open(out_file, 'w') as f:
+            p = Popen(['/home/robert/Projects/neci_rdm/build/bin/neci', in_file], stdout=f)
+        p.wait()
+        print "neci finished"
 
 
 def read_energy(fciqmcci):
