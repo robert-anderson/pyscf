@@ -165,6 +165,7 @@ class FCIQMCCI(object):
             out_file = self.outputFileCurrent
             logger.debug1(self, open(out_file))
         rdm_energy = read_energy(self)
+        print "NECI rdm energy",rdm_energy
 
         return rdm_energy, None
 
@@ -217,10 +218,10 @@ class FCIQMCCI(object):
                 # to              D[i,j,k,l] = < i^+ k^+ l j > to match pyscf
                 # Therefore, all we need to do is to swap the middle two indices.
                 ind1 = int(linesp[0]) - 1
-                ind2 = int(linesp[2]) - 1
-                ind3 = int(linesp[4]) - 1
-                ind4 = int(linesp[1]) - 1
-                ind5 = int(linesp[3]) - 1
+                ind2 = int(linesp[3]) - 1
+                ind3 = int(linesp[1]) - 1
+                ind4 = int(linesp[4]) - 1
+                ind5 = int(linesp[2]) - 1
                 ind6 = int(linesp[5]) - 1
                 assert(int(ind1) < norb_active)
                 assert(int(ind2) < norb_active)
@@ -253,12 +254,12 @@ class FCIQMCCI(object):
             if(int(linesp[0]) != -1):
                 # Arrays from neci are '1' indexed
                 ind1 = int(linesp[0]) - 1
-                ind2 = int(linesp[2]) - 1
-                ind3 = int(linesp[4]) - 1
-                ind4 = int(linesp[6]) - 1
-                ind5 = int(linesp[1]) - 1
-                ind6 = int(linesp[3]) - 1
-                ind7 = int(linesp[5]) - 1
+                ind2 = int(linesp[4]) - 1
+                ind3 = int(linesp[1]) - 1
+                ind4 = int(linesp[5]) - 1
+                ind5 = int(linesp[2]) - 1
+                ind6 = int(linesp[6]) - 1
+                ind7 = int(linesp[3]) - 1
                 ind8 = int(linesp[7]) - 1
                 assert(int(ind1) < norb_active)
                 assert(int(ind2) < norb_active)
@@ -716,13 +717,10 @@ def execute_fciqmc(fciqmcci):
         except:
             input("Press Enter to continue with calculation...")
     else:
-        print "starting neci"
         #call("%s  %s > %s" % (fciqmcci.executable, in_file, out_file), shell=True)
-        print ['/home/robert/Projects/neci_rdm/build/bin/neci', in_file]
         with open(out_file, 'w') as f:
             p = Popen(['/home/robert/Projects/neci_rdm/build/bin/neci', in_file], stdout=f)
         p.wait()
-        print "neci finished"
 
 
 def read_energy(fciqmcci):

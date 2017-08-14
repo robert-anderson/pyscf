@@ -7,6 +7,7 @@
 import ctypes
 import time
 import tempfile
+import itertools
 from functools import reduce
 import numpy
 import h5py
@@ -647,7 +648,6 @@ class NEVPT(lib.StreamObject):
         return self
 
 
-
     def kernel(self):
         if isinstance(self.verbose, logger.Logger):
             log = self.verbose
@@ -665,10 +665,29 @@ class NEVPT(lib.StreamObject):
             logger.info(self, 'DMRG-NEVPT')
             dm1, dm2, dm3 = self.fcisolver._make_dm123(self.load_ci(),self.ncas,self.nelecas,None)
         elif self.fcisolver.__class__ is fciqmcscf.FCIQMCCI:
-            dm2 = self.fcisolver.read_neci_two_pdm(self, 'spinfree_TwoRDM.1', self.ncas)
-            dm1 = fciqmcscf.one_from_two_pdm(dm2, self.nelecas)
-            dm3 = self.fcisolver.read_neci_three_pdm(self, 'spinfree_ThreeRDM.1', self.ncas)
-            dm4 = self.fcisolver.read_neci_four_pdm(self, 'spinfree_FourRDM.1', self.ncas)
+
+            # DEBUGGING ONLY
+            '''
+            self._mc.fcisolver = fci.solver(self._mc.mol, self._mc.nelecas[0]==self._mc.nelecas[1], False)
+            ex_e_tot, ex_e_cas, ex_casvec, ex_mo_coeffs, ex_mo_energy = self._mc.kernel()
+            ex_dm1, ex_dm2, ex_dm3, ex_dm4 = fci.rdm.make_dm1234('FCI4pdm_kern_sf',
+                                               ex_casvec, ex_casvec, self.ncas, self.nelecas)
+
+            fci.rdm.reorder_dm1234(ex_dm1, ex_dm2, ex_dm3, ex_dm4, inplace=True)
+            '''
+
+            dm2 = self.fcisolver.read_neci_two_pdm('spinfree_TwoRDM.1', self.ncas)
+            dm1 = fciqmcscf.fciqmc.one_from_two_pdm(dm2, self.nelecas)
+            dm3 = self.fcisolver.read_neci_three_pdm('spinfree_ThreeRDM.1', self.ncas)
+            dm4 = self.fcisolver.read_neci_four_pdm('spinfree_FourRDM.1', self.ncas)
+            fci.rdm.unreorder_dm1234(dm1, dm2, dm3, dm4)
+
+            # DEBUGGING ONLY
+            '''
+            assert(numpy.allclose(ex_dm3, dm3))
+            assert(numpy.allclose(ex_dm4, dm4))
+            '''
+
         else:
             dm1, dm2, dm3 = fci.rdm.make_dm123('FCI3pdm_kern_sf',
                                                self.load_ci(), self.load_ci(), self.ncas, self.nelecas)
@@ -690,6 +709,8 @@ class NEVPT(lib.StreamObject):
             if self.fcisolver.__class__ is fciqmcscf.FCIQMCCI:
                 # in this case we don't have the CI vector so we have to put the intermediates
                 # together ourselves
+                #mo_core, mo_cas, mo_virt = _extract_orbs(self._mc, self._mc.mo_coeff)
+                h2e = eris['ppaa'][self.ncore:nocc,self.ncore:nocc].transpose(0,2,1,3)
 
                 # numpy.einsum('ijka,rpqbjcik->pqrabc', h2e, dm4)
                 #   equals
