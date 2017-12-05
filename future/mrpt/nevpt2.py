@@ -27,6 +27,88 @@ NUMERICAL_ZERO = 1e-14
 # h1e is the CAS space effective 1e hamiltonian
 # h2e is the CAS space 2e integrals in  notation # a' -> p # b' -> q # c' -> r
 # d' -> s
+'''
+def get_lower_rank_pose_rdm_elem(no_rdm1, no_rdm2, no_rdm3, inds):
+    i,j,k,l,a,b,c,d = inds
+    e=0.0
+    #if not lower_rank_only:
+    #    e += rdm4[i,j,k,l,a,b,c,d]
+    if a==k:
+        e+=no_rdm3[i,j,l,c,b,d]
+    if b==l:
+        e+=no_rdm3[i,j,k,a,d,c]
+    if b==k:
+        e+=no_rdm3[i,j,l,a,c,d]
+    if a==l:
+        e+=no_rdm3[i,j,k,d,b,c]
+    if c==l:
+        e+=no_rdm3[i,j,k,a,b,d]
+    if a==j:
+        e+=no_rdm3[i,k,l,b,c,d]
+    if a==j and b==l:
+        e+=no_rdm2[i,k,d,c]
+    if b==k and a==l:
+        e+=no_rdm2[i,j,d,c]
+    if a==k and b==l:
+        e+=no_rdm2[i,j,c,d]
+    if a==j and c==l:
+        e+=no_rdm2[i,k,b,d]
+    if a==j and b==k:
+        e+=no_rdm2[i,l,c,d]
+    if b==k and c==l:
+        e+=no_rdm2[i,j,a,d]
+    if a==k and c==l:
+        e+=no_rdm2[i,j,d,b]
+    if a==j and b==k and c==l:
+        e+=no_rdm1[i,d]
+    return e
+'''
+
+def get_pose_rdm_elem_from_no_rdm_4(rdm1, rdm2, rdm3, rdm4, inds, lower_rank_only=False):
+    i,j,k,l,a,b,c,d = inds
+    e=0.0
+    if not lower_rank_only:
+        e += rdm4[i,j,k,l,a,b,c,d]
+    if a==k:
+        e+=rdm3[i,j,l,c,b,d]
+    if b==l:
+        e+=rdm3[i,j,k,a,d,c]
+    if b==k:
+        e+=rdm3[i,j,l,a,c,d]
+    if a==l:
+        e+=rdm3[i,j,k,d,b,c]
+    if c==l:
+        e+=rdm3[i,j,k,a,b,d]
+    if a==j:
+        e+=rdm3[i,k,l,b,c,d]
+    if a==j and b==l:
+        e+=rdm2[i,k,d,c]
+    if b==k and a==l:
+        e+=rdm2[i,j,d,c]
+    if a==k and b==l:
+        e+=rdm2[i,j,c,d]
+    if a==j and c==l:
+        e+=rdm2[i,k,b,d]
+    if a==j and b==k:
+        e+=rdm2[i,l,c,d]
+    if b==k and c==l:
+        e+=rdm2[i,j,a,d]
+    if a==k and c==l:
+        e+=rdm2[i,j,d,b]
+    if a==j and b==k and c==l:
+        e+=rdm1[i,d]
+    return e
+
+
+
+
+
+
+def get_lower_rank_pose_rdm(no_rdm1, no_rdm2, no_rdm3, norb):
+    pose_rdm = numpy.zeros((norb,)*8)
+    for inds in itertools.product(range(norb), repeat=8):
+        pose_rdm[inds] = get_pose_rdm_elem_from_no_rdm_4(no_rdm1, no_rdm2, no_rdm3, None, inds, True)
+    return pose_rdm
 
 def make_a16(h1e, h2e, dms, civec, norb, nelec, link_index=None):
     dm3 = dms['3']
@@ -647,7 +729,6 @@ class NEVPT(lib.StreamObject):
         self.compressed_mps = True
         return self
 
-
     def kernel(self):
         if isinstance(self.verbose, logger.Logger):
             log = self.verbose
@@ -656,8 +737,8 @@ class NEVPT(lib.StreamObject):
         time0 = (time.clock(), time.time())
         #By defaut, _mc is canonicalized for the first root.
         #For SC-NEVPT based on compressed MPS perturber functions, the _mc was already canonicalized.
-        if (not self.canonicalized):
-            self.mo_coeff,_, self.mo_energy = self.canonicalize(self.mo_coeff,ci=self.load_ci(),verbose=self.verbose)
+        #if (not self.canonicalized):
+        #    self.mo_coeff,_, self.mo_energy = self.canonicalize(self.mo_coeff,ci=self.load_ci(),verbose=self.verbose)
 
         dm4 = None
 
@@ -679,8 +760,22 @@ class NEVPT(lib.StreamObject):
             dm2 = self.fcisolver.read_neci_two_pdm('spinfree_TwoRDM.1', self.ncas)
             dm1 = fciqmcscf.fciqmc.one_from_two_pdm(dm2, self.nelecas)
             dm3 = self.fcisolver.read_neci_three_pdm('spinfree_ThreeRDM.1', self.ncas)
-            dm4 = self.fcisolver.read_neci_four_pdm('spinfree_FourRDM.1', self.ncas)
-            fci.rdm.unreorder_dm1234(dm1, dm2, dm3, dm4)
+            if self.fcisolver.t_scnevpt2_intermediates:
+                f3ac = self.fcisolver.read_neci_three_pdm('spinfree_F3AC.1', self.ncas)
+                f3ca = self.fcisolver.read_neci_three_pdm('spinfree_F3CA.1', self.ncas)
+
+                eris = _ERIS(self, self.mo_coeff)
+                nocc = self.ncore + self.ncas
+                h2e = eris['ppaa'][self.ncore:nocc,self.ncore:nocc].transpose(0,2,1,3)
+
+                lower_rank_dm4 = get_lower_rank_pose_rdm(dm1, dm2, dm3, self.ncas)
+                f3ac += numpy.einsum('ijka,rpqbjcik->pqrabc', h2e, lower_rank_dm4).transpose(2,0,1,4,3,5)
+                f3ca += numpy.einsum('kcij,rpqbajki->pqrabc', h2e, lower_rank_dm4).transpose(2,0,1,4,3,5)
+                fci.rdm.unreorder_dm123(dm1, dm2, dm3)
+            else:
+                dm4 = self.fcisolver.read_neci_four_pdm('spinfree_FourRDM.1', self.ncas)
+
+                fci.rdm.unreorder_dm1234(dm1, dm2, dm3, dm4)
 
             # DEBUGGING ONLY
             '''
@@ -707,30 +802,44 @@ class NEVPT(lib.StreamObject):
             aaaa = eris['ppaa'][self.ncore:nocc,self.ncore:nocc].copy()
 
             if self.fcisolver.__class__ is fciqmcscf.FCIQMCCI:
-                # in this case we don't have the CI vector so we have to put the intermediates
-                # together ourselves
-                #mo_core, mo_cas, mo_virt = _extract_orbs(self._mc, self._mc.mo_coeff)
-                h2e = eris['ppaa'][self.ncore:nocc,self.ncore:nocc].transpose(0,2,1,3)
 
-                # numpy.einsum('ijka,rpqbjcik->pqrabc', h2e, dm4)
-                #   equals
-                # f3ac.transpose(1,2,0,4,3,5) # c'a'b'bac -> a'b'c'abc
-                #   i.e.
-                f3ac = numpy.einsum('ijka,rpqbjcik->pqrabc', h2e, dm4).transpose(2,0,1,4,3,5)
+                '''
+                exact_f3ca = _contract4pdm('NEVPTkern_cedf_aedf', aaaa, self.load_ci(), self.ncas,
+                                          self.nelecas, (link_indexa,link_indexb))
+                print numpy.allclose(exact_f3ca, f3ca)
+                assert(0)
+                '''
 
-                # likewise:
-                # numpy.einsum('kcij,rpqbajki->pqrabc', h2e, dm4)
-                #   equals
-                # f3ca.transpose(1,2,0,4,3,5) # c'a'b'bac -> a'b'c'abc
-                #   i.e.
-                f3ca = numpy.einsum('kcij,rpqbajki->pqrabc', h2e, dm4).transpose(2,0,1,4,3,5)
+                if not self.fcisolver.t_scnevpt2_intermediates:
+                    # in this case we don't have the CI vector so we have to put the intermediates
+                    # together ourselves
+                    #mo_core, mo_cas, mo_virt = _extract_orbs(self._mc, self._mc.mo_coeff)
+                    h2e = eris['ppaa'][self.ncore:nocc,self.ncore:nocc].transpose(0,2,1,3)
+
+                    # numpy.einsum('ijka,rpqbjcik->pqrabc', h2e, dm4)
+                    #   equals
+                    # f3ac.transpose(1,2,0,4,3,5) # c'a'b'bac -> a'b'c'abc
+                    #   i.e.
+                    f3ac = numpy.einsum('ijka,rpqbjcik->pqrabc', h2e, dm4).transpose(2,0,1,4,3,5)
+
+                    # likewise:
+                    # numpy.einsum('kcij,rpqbajki->pqrabc', h2e, dm4)
+                    #   equals
+                    # f3ca.transpose(1,2,0,4,3,5) # c'a'b'bac -> a'b'c'abc
+                    #   i.e.
+                    f3ca = numpy.einsum('kcij,rpqbajki->pqrabc', h2e, dm4).transpose(2,0,1,4,3,5)
+                    numpy.save('F3AC_pycontract.npy', f3ac)
+                    numpy.save('F3CA_pycontract.npy', f3ca)
+                    numpy.save('dm4.npy', dm4)
+                    numpy.save('h2e.npy', h2e)
+                    #assert(0)
 
             else:
                 f3ca = _contract4pdm('NEVPTkern_cedf_aedf', aaaa, self.load_ci(), self.ncas,
                                      self.nelecas, (link_indexa,link_indexb))
                 f3ac = _contract4pdm('NEVPTkern_aedf_ecdf', aaaa, self.load_ci(), self.ncas,
                                      self.nelecas, (link_indexa,link_indexb))
-
+            
             dms['f3ca'] = f3ca
             dms['f3ac'] = f3ac
         time1 = log.timer('eri-4pdm contraction', *time1)
@@ -992,8 +1101,6 @@ def _trans(mo, ncore, ncas, fload, cvcv=None, ao_loc=None):
     ppaa = lib.transpose(aapp.reshape(ncas**2,-1))
     return (ppaa.reshape(nmo,nmo,ncas,ncas), papa.reshape(nmo,ncas,nmo,ncas),
             pacv.reshape(nmo,ncas,ncore,nvir), cvcv)
-
-
 
 
 if __name__ == '__main__':

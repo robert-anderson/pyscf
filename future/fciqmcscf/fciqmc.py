@@ -97,6 +97,7 @@ class FCIQMCCI(object):
         self.calc_options = ''
         self.logging_options = ''
         self.nroots = 1
+        self.t_scnevpt2_intermediates = False
 
         if mol.symmetry:
             self.groupname = mol.groupname
@@ -150,9 +151,13 @@ class FCIQMCCI(object):
             neleca, nelecb = nelec
 
         write_integrals_file(h1e, eri, norb, neleca, nelecb, self, ecore)
+        assert(0)
 
-        if self.calc_exact_states and self.hbrdm_rank==4:
-            write_nevpt2_exact_config_file(self, neleca, nelecb, fci_restart)
+        if self.calc_exact_states:
+            if self.hbrdm_rank==4:
+                write_nevpt2_exact_config_file(self, neleca, nelecb, fci_restart)
+            else:
+                write_exact_config_file(self, neleca, nelecb, fci_restart)
         else:
             write_fciqmc_config_file(self, neleca, nelecb, fci_restart)
 
@@ -165,7 +170,7 @@ class FCIQMCCI(object):
             out_file = self.outputFileCurrent
             logger.debug1(self, open(out_file))
         rdm_energy = read_energy(self)
-        print "NECI rdm energy",rdm_energy
+        #print "NECI rdm energy",rdm_energy
 
         return rdm_energy, None
 
@@ -407,6 +412,7 @@ def run_standalone(fciqmcci, scf_obj, orbs=None, restart=None):
         if fciqmcci.calc_exact_states and fciqmcci.hbrdm_rank==4:
             write_nevpt2_exact_config_file(fciqmcci, neleca, nelecb, restart, tUHF)
         else:
+            #assert(0)
             write_fciqmc_config_file(fciqmcci, neleca, nelecb, restart, tUHF)
 
     if fciqmcci.verbose >= logger.DEBUG1:
@@ -494,6 +500,53 @@ def write_uhf_integrals_neci(fciqmcci,scf_obj,nmo,nelec,orbs,orbsym,tol=1e-15):
         fout.write(output_format % nuc)
     return 
 
+def write_exact_config_file(fciqmcci, neleca, nelecb, restart, tUHF=False):
+    file_string = '''
+title
+
+system read
+electrons {data[nelec]}
+sym 0 0 0 0 
+endsys
+
+calc
+fci-init
+methods
+method vertex fcimc
+endmethods
+memoryfacspawn 20.0
+memoryfacpart 3.0
+totalwalkers 1000
+startsinglepart 10
+stepsshift 10
+tau 0.01
+shiftdamp 0.05
+allrealcoeff
+realspawncutoff 0.01
+nmcyc 26000
+load-balance-blocks off
+endcalc
+
+integral
+endint
+
+logging
+popsfile -1
+calcrdmonfly 3 4000 500
+explicitallrdm
+exactrdm
+printonerdm
+write-spin-free-rdm
+endlog
+end
+'''
+    data = {
+            'nelec':str(neleca + nelecb)
+    }
+    config_file = fciqmcci.configFile
+    with open(config_file, 'w') as f:
+        f.write(file_string.format(data=data))
+
 
 def write_nevpt2_exact_config_file(fciqmcci, neleca, nelecb, restart, tUHF=False):
     file_string = '''
@@ -530,6 +583,7 @@ popsfile -1
 calcrdmonfly 3 4000 500
 four-body-rdm
 calc-three-from-four-rdm
+{}
 explicitallrdm
 exactrdm
 printonerdm
@@ -542,7 +596,11 @@ end
     }
     config_file = fciqmcci.configFile
     with open(config_file, 'w') as f:
-        f.write(file_string.format(data=data))
+        f.write(file_string.format(
+            'scnevpt2-intermediates' if fciqmcci.t_scnevpt2_intermediates else 'calc-three-from-four-rdm',
+            data=data,
+            )
+        )
 
 def write_fciqmc_config_file(fciqmcci, neleca, nelecb, restart, tUHF=False):
     '''Write an input file for a NECI calculation.
@@ -949,7 +1007,7 @@ def add_spinned_core_rdms(mf, ncore, dm1a_act, dm1b_act, dm2aa_act, dm2ab_act, d
 
     return dm1a, dm1b, dm2aa, dm2ab, dm2bb
 
-def read_neci_two_pdm(fciqmcci, filename, norb, directory='.'):
+def read_neci_two_pdm(fciqmcci, filename, norb, nfrzorb=0, directory='.'):
     '''Read a spin-free 2-rdm output from a NECI calculation, and return it in
     a form supported by pyscf. Note that the RDMs in neci are written in
     as RDM_ijkl = < a^+_is a^+_jt a_lt a_ks >. In pyscf, the correlated _after
@@ -976,9 +1034,9 @@ def read_neci_two_pdm(fciqmcci, filename, norb, directory='.'):
 
     f = open(os.path.join(directory, filename), 'r')
 
-    nfrzorb = fciqmcci.nfreezecore//2
+    #nfrzorb = fciqmcci.nfreezecore//2
 
-    norb_active = norb - nfrzorb
+    norb_active = norb #- nfrzorb
     two_pdm_active = numpy.zeros( (norb_active, norb_active, norb_active, norb_active) )
     for line in f.readlines():
         linesp = line.split()
@@ -1004,7 +1062,9 @@ def read_neci_two_pdm(fciqmcci, filename, norb, directory='.'):
             two_pdm_active[ind1, ind2, ind3, ind4] = float(linesp[4])
 
     f.close()
+    return two_pdm_active
 
+    '''
     # In order to add any frozen core, we first need to find the spin-free
     # 1-RDM in the active space.
     one_pdm_active = one_from_two_pdm(two_pdm_active,fciqmcci.mol.nelectron-fciqmcci.nfreezecore)
@@ -1031,16 +1091,17 @@ def read_neci_two_pdm(fciqmcci, filename, norb, directory='.'):
         for j in range(nfrzorb):
             two_pdm[i,i,j,j] += 4.0
             two_pdm[i,j,j,i] += -2.0
+    '''
 
-    return two_pdm
+#    return two_pdm
 
-def read_neci_three_pdm(fciqmcci, filename, norb, directory='.'):
+def read_neci_three_pdm(filename, norb, nfrzorb=0, directory='.'):
     f = open(os.path.join(directory, filename), 'r')
 
-    nfrzorb = fciqmcci.nfreezecore//2
+    #nfrzorb = fciqmcci.nfreezecore//2
 
     norb_active = norb - nfrzorb
-    three_pdm_active = numpy.zeros( (norb_active, norb_active, norb_active, norb_active, norn_active, norb_active) )
+    three_pdm_active = numpy.zeros( (norb_active,)*6)
     for line in f.readlines():
         linesp = line.split()
 
@@ -1050,10 +1111,10 @@ def read_neci_three_pdm(fciqmcci, filename, norb, directory='.'):
             # to              D[i,j,k,l] = < i^+ k^+ l j > to match pyscf
             # Therefore, all we need to do is to swap the middle two indices.
             ind1 = int(linesp[0]) - 1
-            ind2 = int(linesp[2]) - 1
-            ind3 = int(linesp[4]) - 1
-            ind4 = int(linesp[1]) - 1
-            ind5 = int(linesp[3]) - 1
+            ind2 = int(linesp[3]) - 1
+            ind3 = int(linesp[1]) - 1
+            ind4 = int(linesp[4]) - 1
+            ind5 = int(linesp[2]) - 1
             ind6 = int(linesp[5]) - 1
             assert(int(ind1) < norb_active)
             assert(int(ind2) < norb_active)
@@ -1124,25 +1185,25 @@ def read_neci_three_pdm(fciqmcci, filename, norb, directory='.'):
     return three_pdm
     '''
 
-def read_neci_four_pdm(fciqmcci, filename, norb, directory='.'):
+def read_neci_four_pdm(filename, norb, nfrzorb=0, directory='.'):
     f = open(os.path.join(directory, filename), 'r')
 
-    nfrzorb = fciqmcci.nfreezecore//2
+    #nfrzorb = fciqmcci.nfreezecore//2
 
     norb_active = norb - nfrzorb
-    three_pdm_active = numpy.zeros( (norb_active, norb_active, norb_active, norb_active, norn_active, norb_active) )
+    four_pdm_active = numpy.zeros( (norb_active,)*8 )
     for line in f.readlines():
         linesp = line.split()
 
         if(int(linesp[0]) != -1):
             # Arrays from neci are '1' indexed
             ind1 = int(linesp[0]) - 1
-            ind2 = int(linesp[2]) - 1
-            ind3 = int(linesp[4]) - 1
-            ind4 = int(linesp[6]) - 1
-            ind5 = int(linesp[1]) - 1
-            ind6 = int(linesp[3]) - 1
-            ind7 = int(linesp[5]) - 1
+            ind2 = int(linesp[4]) - 1
+            ind3 = int(linesp[1]) - 1
+            ind4 = int(linesp[5]) - 1
+            ind5 = int(linesp[2]) - 1
+            ind6 = int(linesp[6]) - 1
+            ind7 = int(linesp[3]) - 1
             ind8 = int(linesp[7]) - 1
             assert(int(ind1) < norb_active)
             assert(int(ind2) < norb_active)
