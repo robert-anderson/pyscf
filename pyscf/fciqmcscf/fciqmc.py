@@ -68,6 +68,7 @@ class FCIQMCCI(object):
         self.executable = settings.FCIQMCEXE
         # Shouldn't need scratch dir settings.BLOCKSCRATCHDIR.
         self.scratchDirectory = ''
+        self.only_ints = False
 
         self.generate_neci_input = True
         self.integralFile = "FCIDUMP"
@@ -259,7 +260,11 @@ def run_standalone(fciqmcci, scf_obj, orbs=None, restart=None):
     if tUHF:
         write_uhf_integrals_neci(fciqmcci,scf_obj,nmo,nelec,orbs,orbsym,tol=tol)
     else:
-        eri = pyscf.ao2mo.incore.general(scf_obj._eri, (orbs,)*4, compact=False)
+        try:
+            eri = pyscf.ao2mo.incore.general(scf_obj._eri, (orbs,)*4, compact=False)
+        except AttributeError:
+            eri = pyscf.ao2mo.kernel(fciqmcci.mol, scf_obj.mo_coeff)
+
         h_core = scf_obj.get_hcore(fciqmcci.mol)
 #        t = fciqmcci.mol.intor_symmetric('cint1e_kin_sph')
 #        v = fciqmcci.mol.intor_symmetric('cint1e_nuc_sph')
@@ -268,6 +273,8 @@ def run_standalone(fciqmcci, scf_obj, orbs=None, restart=None):
         pyscf.tools.fcidump.from_integrals(fciqmcci.integralFile, h, 
                 pyscf.ao2mo.restore(8,eri,nmo), nmo, nelec, fciqmcci.mol.energy_nuc(),
                 fciqmcci.mol.spin, orbsym, tol=tol)
+	if fciqmcci.only_ints:
+		return
 
 #    pyscf.tools.fcidump.write_eri(fout, pyscf.ao2mo.restore(8,eri,nmo),
 #                                  nmo, tol=tol)
