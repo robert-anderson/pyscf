@@ -12,6 +12,7 @@ from functools import reduce
 import numpy
 import h5py
 from pyscf import lib
+from pyscf import fciqmcscf
 from pyscf.lib import logger
 from pyscf import fci
 from pyscf.mcscf import mc_ao2mo
@@ -601,6 +602,8 @@ class NEVPT(lib.StreamObject):
 
     def load_ci(self, root=None):
         '''Hack me to load CI wfn from disk'''
+        if self.fcisolver.__class__ == fciqmcscf.FCIQMCCI:
+            return None
         if root is None:
             root = self.root
         if self._mc.fcisolver.nroots == 1:
@@ -663,10 +666,15 @@ class NEVPT(lib.StreamObject):
         time0 = (time.clock(), time.time())
         #By defaut, _mc is canonicalized for the first root.
         #For SC-NEVPT based on compressed MPS perturber functions, the _mc was already canonicalized.
-        if (not self.canonicalized):
+        if (not self.canonicalized) and not self.fcisolver.__class__ == fciqmcscf.FCIQMCCI:
             self.mo_coeff,_, self.mo_energy = self.canonicalize(self.mo_coeff,ci=self.load_ci(),verbose=self.verbose)
 
-        if hasattr(self.fcisolver, 'nevpt_intermediate'):
+
+        if self.fcisolver.__class__ == fciqmcscf.FCIQMCCI:
+            dm1, dm2, dm3 = fciqmcscf.stochastic_mrpt.read_rdms_fciqmc(self.ncas, self.nelecas)
+            if (not self.canonicalized):
+                self.mo_coeff,_, self.mo_energy = self.canonicalize(self.mo_coeff,ci=None,verbose=self.verbose,casdm1=dm1)
+        elif hasattr(self.fcisolver, 'nevpt_intermediate'):
             logger.info(self, 'DMRG-NEVPT')
             dm1, dm2, dm3 = self.fcisolver._make_dm123(self.load_ci(),self.ncas,self.nelecas,None)
         else:
@@ -679,18 +687,32 @@ class NEVPT(lib.StreamObject):
               }
         time1 = log.timer('3pdm, 4pdm', *time0)
 
-        eris = _ERIS(self, self.mo_coeff)
+        
+        if self.fcisolver.__class__ == fciqmcscf.FCIQMCCI:
+            import pickle
+            with open('casci.pkl', 'rb') as f:
+                eris = pickle.load(f)['eris']
+        else:
+            eris = _ERIS(self, self.mo_coeff)
+
         time1 = log.timer('integral transformation', *time1)
         nocc = self.ncore + self.ncas
 
-        if not hasattr(self.fcisolver, 'nevpt_intermediate'):  # regular FCI solver
-            link_indexa = fci.cistring.gen_linkstr_index(range(self.ncas), self.nelecas[0])
-            link_indexb = fci.cistring.gen_linkstr_index(range(self.ncas), self.nelecas[1])
+        if not hasattr(self.fcisolver, 'nevpt_intermediate') or self.fcisolver.__class__ == fciqmcscf.FCIQMCCI:
             aaaa = eris['ppaa'][self.ncore:nocc,self.ncore:nocc].copy()
-            f3ca = _contract4pdm('NEVPTkern_cedf_aedf', aaaa, self.load_ci(), self.ncas,
-                                 self.nelecas, (link_indexa,link_indexb))
-            f3ac = _contract4pdm('NEVPTkern_aedf_ecdf', aaaa, self.load_ci(), self.ncas,
-                                 self.nelecas, (link_indexa,link_indexb))
+            if self.fcisolver.__class__ == fciqmcscf.FCIQMCCI:
+                f3ac, f3ca = fciqmcscf.stochastic_mrpt.full_nevpt2_intermediates_fciqmc(dm1, dm2, dm3, self.ncas, aaaa.transpose(0,2,1,3))
+                # the dms are all normal ordered, so switch to product-of-single-excitation ordering
+                fciqmcscf.stochastic_mrpt.unreorder_dm123(dms['1'], dms['2'], dms['3'], inplace=True)
+
+            elif not hasattr(self.fcisolver, 'nevpt_intermediate'):
+                link_indexa = fci.cistring.gen_linkstr_index(range(self.ncas), self.nelecas[0])
+                link_indexb = fci.cistring.gen_linkstr_index(range(self.ncas), self.nelecas[1])
+                f3ca = _contract4pdm('NEVPTkern_cedf_aedf', aaaa, self.load_ci(), self.ncas,
+                                     self.nelecas, (link_indexa,link_indexb))
+                f3ac = _contract4pdm('NEVPTkern_aedf_ecdf', aaaa, self.load_ci(), self.ncas,
+                                     self.nelecas, (link_indexa,link_indexb))
+
             dms['f3ca'] = f3ca
             dms['f3ac'] = f3ac
         time1 = log.timer('eri-4pdm contraction', *time1)

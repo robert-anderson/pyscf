@@ -874,6 +874,40 @@ def one_from_two_pdm(two_pdm, nelec):
     one_pdm /= (numpy.sum(nelec)-1)
     return one_pdm
 
+
+def one_from_two_pdm(two_pdm, nelec):
+    '''Return a 1-rdm, given a 2-rdm to contract.
+
+    Args:
+        two_pdm : ndarray
+            A (spin-free) 2-particle reduced density matrix.
+        nelec: int
+            The number of electrons contributing to the RDMs.
+
+    Returns:
+        one_pdm : ndarray
+            The (spin-free) 1-particle reduced density matrix.
+    '''
+
+    # Last two indices refer to middle two second quantized operators in the 2RDM
+    one_pdm = numpy.einsum('ikpp->ik', two_pdm)
+    one_pdm /= (numpy.sum(nelec)-1)
+    return one_pdm
+
+def two_from_three_pdm(three_pdm, nelec):
+    # Last two indices refer to middle two second quantized operators in the 3RDM
+    two_pdm = numpy.einsum('ikjlpp->ijkl', three_pdm)
+    two_pdm /= (numpy.sum(nelec)-2)
+    return two_pdm
+
+def three_from_four_pdm(four_pdm, nelec):
+    # Last two indices refer to middle two second quantized operators in the 4RDM
+    three_pdm = numpy.einsum('ikjlmnpp->ijklmn', four_pdm)
+    three_pdm /= (numpy.sum(nelec)-3)
+    return three_pdm
+
+
+
 def find_full_casscf_12rdm(fciqmcci, mo_coeff, filename, norbcas, neleccas, directory='.'):
     '''Return the 1 and 2 full RDMs after a CASSCF calculation, by adding
     on the contributions from the inactive spaces. Requires the cas space to
