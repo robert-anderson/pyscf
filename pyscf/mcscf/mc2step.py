@@ -16,7 +16,7 @@
 # Author: Qiming Sun <osirpt.sun@gmail.com>
 #
 
-import time
+import time, shutil
 from functools import reduce
 import numpy
 import pyscf.lib.logger as logger
@@ -139,6 +139,10 @@ def kernel(casscf, mo_coeff, tol=1e-7, conv_tol_grad=None,
 
     if dump_chk:
         casscf.dump_chk(locals())
+    
+    #shutil.copy('FCIDUMP', 'FCIDUMP_pre_canon')
+    casscf.casci(mo, fcivec, eris, log, locals())
+    #shutil.copy('FCIDUMP', 'FCIDUMP_post_canon')
 
     log.timer('2-step CASSCF', *cput0)
     return conv, e_tot, e_cas, fcivec, mo, mo_energy

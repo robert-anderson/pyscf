@@ -21,6 +21,7 @@ import os
 import ctypes
 import time
 import tempfile
+import itertools
 from functools import reduce
 import numpy
 import h5py
@@ -31,6 +32,7 @@ from pyscf import fci
 from pyscf.mcscf import mc_ao2mo
 from pyscf import ao2mo
 from pyscf.ao2mo import _ao2mo
+from pyscf import fciqmcscf
 
 libmc = lib.load_library('libmcscf')
 
@@ -40,6 +42,88 @@ NUMERICAL_ZERO = 1e-14
 # h1e is the CAS space effective 1e hamiltonian
 # h2e is the CAS space 2e integrals in  notation # a' -> p # b' -> q # c' -> r
 # d' -> s
+'''
+def get_lower_rank_pose_rdm_elem(no_rdm1, no_rdm2, no_rdm3, inds):
+    i,j,k,l,a,b,c,d = inds
+    e=0.0
+    #if not lower_rank_only:
+    #    e += rdm4[i,j,k,l,a,b,c,d]
+    if a==k:
+        e+=no_rdm3[i,j,l,c,b,d]
+    if b==l:
+        e+=no_rdm3[i,j,k,a,d,c]
+    if b==k:
+        e+=no_rdm3[i,j,l,a,c,d]
+    if a==l:
+        e+=no_rdm3[i,j,k,d,b,c]
+    if c==l:
+        e+=no_rdm3[i,j,k,a,b,d]
+    if a==j:
+        e+=no_rdm3[i,k,l,b,c,d]
+    if a==j and b==l:
+        e+=no_rdm2[i,k,d,c]
+    if b==k and a==l:
+        e+=no_rdm2[i,j,d,c]
+    if a==k and b==l:
+        e+=no_rdm2[i,j,c,d]
+    if a==j and c==l:
+        e+=no_rdm2[i,k,b,d]
+    if a==j and b==k:
+        e+=no_rdm2[i,l,c,d]
+    if b==k and c==l:
+        e+=no_rdm2[i,j,a,d]
+    if a==k and c==l:
+        e+=no_rdm2[i,j,d,b]
+    if a==j and b==k and c==l:
+        e+=no_rdm1[i,d]
+    return e
+'''
+
+def get_pose_rdm_elem_from_no_rdm_4(rdm1, rdm2, rdm3, rdm4, inds, lower_rank_only=False):
+    i,j,k,l,a,b,c,d = inds
+    e=0.0
+    if not lower_rank_only:
+        e += rdm4[i,j,k,l,a,b,c,d]
+    if a==k:
+        e+=rdm3[i,j,l,c,b,d]
+    if b==l:
+        e+=rdm3[i,j,k,a,d,c]
+    if b==k:
+        e+=rdm3[i,j,l,a,c,d]
+    if a==l:
+        e+=rdm3[i,j,k,d,b,c]
+    if c==l:
+        e+=rdm3[i,j,k,a,b,d]
+    if a==j:
+        e+=rdm3[i,k,l,b,c,d]
+    if a==j and b==l:
+        e+=rdm2[i,k,d,c]
+    if b==k and a==l:
+        e+=rdm2[i,j,d,c]
+    if a==k and b==l:
+        e+=rdm2[i,j,c,d]
+    if a==j and c==l:
+        e+=rdm2[i,k,b,d]
+    if a==j and b==k:
+        e+=rdm2[i,l,c,d]
+    if b==k and c==l:
+        e+=rdm2[i,j,a,d]
+    if a==k and c==l:
+        e+=rdm2[i,j,d,b]
+    if a==j and b==k and c==l:
+        e+=rdm1[i,d]
+    return e
+
+
+
+
+
+
+def get_lower_rank_pose_rdm(no_rdm1, no_rdm2, no_rdm3, norb):
+    pose_rdm = numpy.zeros((norb,)*8)
+    for inds in itertools.product(range(norb), repeat=8):
+        pose_rdm[inds] = get_pose_rdm_elem_from_no_rdm_4(no_rdm1, no_rdm2, no_rdm3, None, inds, True)
+    return pose_rdm
 
 def make_a16(h1e, h2e, dms, civec, norb, nelec, link_index=None):
     dm3 = dms['3']
@@ -662,8 +746,6 @@ class NEVPT(lib.StreamObject):
         self.compressed_mps = True
         return self
 
-
-
     def kernel(self):
         from pyscf.mcscf.addons import StateAverageFCISolver
         if isinstance(self.fcisolver, StateAverageFCISolver):
@@ -683,9 +765,9 @@ class NEVPT(lib.StreamObject):
 
         #By defaut, _mc is canonicalized for the first root.
         #For SC-NEVPT based on compressed MPS perturber functions, the _mc was already canonicalized.
+
         if (not self.canonicalized) and not self.fcisolver.__class__ == fciqmcscf.FCIQMCCI:
             self.mo_coeff,_, self.mo_energy = self.canonicalize(self.mo_coeff,ci=self.load_ci(),verbose=self.verbose)
-
 
         if self.fcisolver.__class__ == fciqmcscf.FCIQMCCI:
             dm1, dm2, dm3 = fciqmcscf.stochastic_mrpt.read_rdms_fciqmc(self.ncas, self.nelecas)
@@ -694,10 +776,47 @@ class NEVPT(lib.StreamObject):
         elif hasattr(self.fcisolver, 'nevpt_intermediate'):
             logger.info(self, 'DMRG-NEVPT')
             dm1, dm2, dm3 = self.fcisolver._make_dm123(self.load_ci(),self.ncas,self.nelecas,None)
+        elif self.fcisolver.__class__ is fciqmcscf.FCIQMCCI:
+
+            # DEBUGGING ONLY
+            '''
+            self._mc.fcisolver = fci.solver(self._mc.mol, self._mc.nelecas[0]==self._mc.nelecas[1], False)
+            ex_e_tot, ex_e_cas, ex_casvec, ex_mo_coeffs, ex_mo_energy = self._mc.kernel()
+            ex_dm1, ex_dm2, ex_dm3, ex_dm4 = fci.rdm.make_dm1234('FCI4pdm_kern_sf',
+                                               ex_casvec, ex_casvec, self.ncas, self.nelecas)
+
+            fci.rdm.reorder_dm1234(ex_dm1, ex_dm2, ex_dm3, ex_dm4, inplace=True)
+            '''
+
+            dm2 = self.fcisolver.read_neci_two_pdm('spinfree_TwoRDM.1', self.ncas)
+            dm1 = fciqmcscf.fciqmc.one_from_two_pdm(dm2, self.nelecas)
+            dm3 = self.fcisolver.read_neci_three_pdm('spinfree_ThreeRDM.1', self.ncas)
+            if self.fcisolver.t_scnevpt2_intermediates:
+                f3ac = self.fcisolver.read_neci_three_pdm('spinfree_F3AC.1', self.ncas)
+                f3ca = self.fcisolver.read_neci_three_pdm('spinfree_F3CA.1', self.ncas)
+
+                eris = _ERIS(self, self.mo_coeff)
+                nocc = self.ncore + self.ncas
+                h2e = eris['ppaa'][self.ncore:nocc,self.ncore:nocc].transpose(0,2,1,3)
+
+                lower_rank_dm4 = get_lower_rank_pose_rdm(dm1, dm2, dm3, self.ncas)
+                f3ac += numpy.einsum('ijka,rpqbjcik->pqrabc', h2e, lower_rank_dm4).transpose(2,0,1,4,3,5)
+                f3ca += numpy.einsum('kcij,rpqbajki->pqrabc', h2e, lower_rank_dm4).transpose(2,0,1,4,3,5)
+                fci.rdm.unreorder_dm123(dm1, dm2, dm3)
+            else:
+                dm4 = self.fcisolver.read_neci_four_pdm('spinfree_FourRDM.1', self.ncas)
+
+                fci.rdm.unreorder_dm1234(dm1, dm2, dm3, dm4)
+
+            # DEBUGGING ONLY
+            '''
+            assert(numpy.allclose(ex_dm3, dm3))
+            assert(numpy.allclose(ex_dm4, dm4))
+            '''
+
         else:
             dm1, dm2, dm3 = fci.rdm.make_dm123('FCI3pdm_kern_sf',
                                                self.load_ci(), self.load_ci(), self.ncas, self.nelecas)
-        dm4 = None
 
         dms = {'1': dm1, '2': dm2, '3': dm3, '4': dm4,
                #'h1': hdm1, 'h2': hdm2, 'h3': hdm3
@@ -717,6 +836,7 @@ class NEVPT(lib.StreamObject):
 
         if not hasattr(self.fcisolver, 'nevpt_intermediate') or self.fcisolver.__class__ == fciqmcscf.FCIQMCCI:
             aaaa = eris['ppaa'][self.ncore:nocc,self.ncore:nocc].copy()
+
             if self.fcisolver.__class__ == fciqmcscf.FCIQMCCI:
                 f3ac, f3ca = fciqmcscf.stochastic_mrpt.full_nevpt2_intermediates_fciqmc(dm1, dm2, dm3, self.ncas, aaaa.transpose(0,2,1,3))
                 # the dms are all normal ordered, so switch to product-of-single-excitation ordering
@@ -725,13 +845,14 @@ class NEVPT(lib.StreamObject):
             elif not hasattr(self.fcisolver, 'nevpt_intermediate'):
                 link_indexa = fci.cistring.gen_linkstr_index(range(self.ncas), self.nelecas[0])
                 link_indexb = fci.cistring.gen_linkstr_index(range(self.ncas), self.nelecas[1])
+
                 f3ca = _contract4pdm('NEVPTkern_cedf_aedf', aaaa, self.load_ci(), self.ncas,
                                      self.nelecas, (link_indexa,link_indexb))
                 f3ac = _contract4pdm('NEVPTkern_aedf_ecdf', aaaa, self.load_ci(), self.ncas,
                                      self.nelecas, (link_indexa,link_indexb))
-
             dms['f3ca'] = f3ca
             dms['f3ac'] = f3ac
+
         time1 = log.timer('eri-4pdm contraction', *time1)
 
         if self.compressed_mps:
@@ -1001,8 +1122,6 @@ def _trans(mo, ncore, ncas, fload, cvcv=None, ao_loc=None):
     ppaa = lib.transpose(aapp.reshape(ncas**2,-1))
     return (ppaa.reshape(nmo,nmo,ncas,ncas), papa.reshape(nmo,ncas,nmo,ncas),
             pacv.reshape(nmo,ncas,ncore,nvir), cvcv)
-
-
 
 
 if __name__ == '__main__':

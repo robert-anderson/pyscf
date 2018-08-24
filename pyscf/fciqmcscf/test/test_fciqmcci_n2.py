@@ -36,6 +36,22 @@ m = scf.RHF(mol)
 m.conv_tol = 1e-9
 m.scf()
 
+mc = mcscf.CASSCF(m, 6, 6)
+mc.max_cycle_macro = 10
+mc.fcisolver = fciqmcscf.FCIQMCCI(mol, calc_exact_states=True, hbrdm_rank=2)
+mc.fcisolver.RDMSamples = 5000
+emc = mc.mc2step()[0]
+
+print emc
+
+'''
+mc2 = mcscf.CASSCF(m, 6, 6)
+emc2 = mc2.mc2step()[0]
+print abs(emc-emc2)<1e-11
+'''
+
+assert(0)
+
 
 class KnowValues(unittest.TestCase):
     def test_mc2step_4o4e_fci(self):
@@ -54,7 +70,7 @@ class KnowValues(unittest.TestCase):
         norb = 4
         mc = mcscf.CASSCF(m, norb, nelec)
         mc.max_cycle_macro = 10
-        mc.fcisolver = fciqmcscf.FCIQMCCI(mol)
+        mc.fcisolver = fciqmcscf.FCIQMCCI(mol, calc_exact_states=True, hbrdm_rank=4)
         mc.fcisolver.RDMSamples = 5000
 
         emc, e_ci, fcivec, casscf_mo, casscf_mo_e = mc.mc2step()
@@ -73,7 +89,7 @@ class KnowValues(unittest.TestCase):
     def test_mc2step_6o6e_fciqmc(self):
         mc = mcscf.CASSCF(m, 6, 6)
         mc.max_cycle_macro = 10
-        mc.fcisolver = fciqmcscf.FCIQMCCI(mol)
+        mc.fcisolver = fciqmcscf.FCIQMCCI(mol, calc_exact_states=True, hbrdm_rank=4)
         mc.fcisolver.RDMSamples = 5000
         emc = mc.mc2step()[0]
         self.assertAlmostEqual(emc,-108.98028859357791, 7)

@@ -42,6 +42,14 @@ def reorder_rdm(rdm1, rdm2, inplace=False):
     return rdm1, rdm2.reshape(nmo,nmo,nmo,nmo)
 
 # dm[p,q] = <|q^+ p|>
+def unreorder_rdm(rdm1, rdm2, inplace=False):
+    nmo = rdm1.shape[0]
+    if not inplace:
+        rdm2 = rdm2.copy()
+    for k in range(nmo):
+        rdm2[:,k,k,:] += rdm1
+    return rdm1, rdm2
+
 def make_rdm1_ms0(fname, cibra, ciket, norb, nelec, link_index=None):
     assert(cibra is not None and ciket is not None)
     cibra = numpy.asarray(cibra, order='C')
@@ -328,6 +336,19 @@ def reorder_dm123(rdm1, rdm2, rdm3, inplace=True):
             rdm3[:,q,q,s,s,:] -= rdm1.T
     return rdm1, rdm2, rdm3
 
+def unreorder_dm123(rdm1, rdm2, rdm3, inplace=True):
+    if not inplace:
+        rdm3 = rdm3.copy()
+    norb = rdm1.shape[0]
+    for q in range(norb):
+        rdm3[:,q,q,:,:,:] += rdm2
+        rdm3[:,:,:,q,q,:] += rdm2
+        rdm3[:,q,:,:,q,:] += rdm2.transpose(0,2,3,1)
+        for s in range(norb):
+            rdm3[:,q,q,s,s,:] += rdm1
+    rdm1, rdm2 = unreorder_rdm(rdm1, rdm2, inplace)
+    return rdm1, rdm2, rdm3
+
 
 # <p^+ q r^+ s t^+ u w^+ v> => <p^+ r^+ t^+ w^+ v u s q>
 # rdm2, rdm3 are the (reordered) standard 2-pdm and 3-pdm
@@ -354,6 +375,32 @@ def reorder_dm1234(rdm1, rdm2, rdm3, rdm4, inplace=True):
             for u in range(norb):
                 rdm4[:,q,q,s,s,u,u,:] -= rdm1.T
     return rdm1, rdm2, rdm3, rdm4
+
+
+def unreorder_dm1234(rdm1, rdm2, rdm3, rdm4, inplace=True):
+    if not inplace:
+        rdm4 = rdm4.copy()
+    norb = rdm1.shape[0]
+    for q in range(norb):
+        rdm4[:,q,:,:,:,:,q,:] += rdm3.transpose(0,2,3,4,5,1)
+        rdm4[:,:,:,q,:,:,q,:] += rdm3.transpose(0,1,2,4,5,3)
+        rdm4[:,:,:,:,:,q,q,:] += rdm3
+        rdm4[:,q,:,:,q,:,:,:] += rdm3.transpose(0,2,3,1,4,5)
+        rdm4[:,:,:,q,q,:,:,:] += rdm3
+        rdm4[:,q,q,:,:,:,:,:] += rdm3
+        for s in range(norb):
+            rdm4[:,q,q,s,:,:,s,:] += rdm2.transpose(0,2,3,1)
+            rdm4[:,q,q,:,:,s,s,:] += rdm2
+            rdm4[:,q,:,:,q,s,s,:] += rdm2.transpose(0,2,3,1)
+            rdm4[:,q,:,s,q,:,s,:] += rdm2.transpose(0,2,1,3)
+            rdm4[:,q,:,s,s,:,q,:] += rdm2.transpose(0,2,3,1)
+            rdm4[:,:,:,s,s,q,q,:] += rdm2
+            rdm4[:,q,q,s,s,:,:,:] += rdm2
+            for u in range(norb):
+                rdm4[:,q,q,s,s,u,u,:] += rdm1
+    rdm1, rdm2, rdm3 = unreorder_dm123(rdm1, rdm2, rdm3, inplace)
+    return rdm1, rdm2, rdm3, rdm4
+
 
 def _unpack_nelec(nelec, spin=None):
     if spin is None:
