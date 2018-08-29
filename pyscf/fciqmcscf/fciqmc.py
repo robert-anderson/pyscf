@@ -165,7 +165,8 @@ class FCIQMCCI(object):
             neleca, nelecb = nelec
 
         write_integrals_file(h1e, eri, norb, neleca, nelecb, self, ecore)
-        assert(0)
+        if self.only_ints:
+            return
 
         if self.calc_exact_states:
             if self.hbrdm_rank==4:

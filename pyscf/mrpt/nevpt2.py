@@ -396,6 +396,7 @@ def Sr(mc,ci,dms, eris=None, verbose=None):
         a16 = mc.fcisolver.nevpt_intermediate('A16',mc.ncas,mc.nelecas,ci)
     else:
         a16 = make_a16(h1e,h2e, dms, ci, mc.ncas, mc.nelecas)
+
     a17 = make_a17(h1e,h2e,dm2,dm3)
     a19 = make_a19(h1e,h2e,dm1,dm2)
 
@@ -766,6 +767,7 @@ class NEVPT(lib.StreamObject):
         #By defaut, _mc is canonicalized for the first root.
         #For SC-NEVPT based on compressed MPS perturber functions, the _mc was already canonicalized.
 
+        dm4 = None
         if (not self.canonicalized) and not self.fcisolver.__class__ == fciqmcscf.FCIQMCCI:
             self.mo_coeff,_, self.mo_energy = self.canonicalize(self.mo_coeff,ci=self.load_ci(),verbose=self.verbose)
 
@@ -823,13 +825,15 @@ class NEVPT(lib.StreamObject):
               }
         time1 = log.timer('3pdm, 4pdm', *time0)
 
-        
+        '''
         if self.fcisolver.__class__ == fciqmcscf.FCIQMCCI:
             import pickle
             with open('casci.pkl', 'rb') as f:
                 eris = pickle.load(f)['eris']
         else:
             eris = _ERIS(self, self.mo_coeff)
+        '''
+        eris = _ERIS(self, self.mo_coeff)
 
         time1 = log.timer('integral transformation', *time1)
         nocc = self.ncore + self.ncas
