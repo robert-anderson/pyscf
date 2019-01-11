@@ -112,6 +112,18 @@ def one_from_two_pdm(two_pdm, nelec):
     one_pdm /= (numpy.sum(nelec)-1)
     return one_pdm
 
+def two_from_three_pdm(three_pdm, nelec):
+    # Last two indices refer to middle two second quantized operators in the 3RDM
+    two_pdm = numpy.einsum('ikjlpp->ikjl', three_pdm)
+    two_pdm /= (numpy.sum(nelec)-2)
+    return two_pdm
+
+def three_from_four_pdm(four_pdm, nelec):
+    # Last two indices refer to middle two second quantized operators in the 4RDM
+    three_pdm = numpy.einsum('ikjlmnpp->ijklmn', four_pdm)
+    three_pdm /= (numpy.sum(nelec)-3)
+    return three_pdm
+
 
 def calc_lower_rank_part_of_intermediates(rdm1, rdm2, rdm3, h2e):
     '''
@@ -249,25 +261,61 @@ def unreorder_dm123(rdm1, rdm2, rdm3, inplace=True):
     rdm1, rdm2 = unreorder_rdm(rdm1, rdm2, inplace)
     return rdm1, rdm2, rdm3
 
-def read_rdms_fciqmc(ncas, nelecas):
-    neci_dm2 = read_neci_two_pdm_mrpt('spinfree_TwoRDM.1', ncas)
+def partial_trace_error(dm3, dm2, nelec):
+    '''
+    compute the frobenius norm of the difference of the sampled 2-RDM and the
+    partial trace of the 3-RDM as a measure of the sampling quality
+
+    inputs are neci (normal-ordered) rdms 
+    '''
+    return numpy.linalg.norm(dm2-two_from_three_pdm(dm3, sum(nelec)))
+
+def hermiticity_error(dm3):
+    return numpy.linalg.norm(dm3.transpose(1,0,3,2,5,4)-dm3.transpose())
+
+def read_rdms_fciqmc(ncas, nelecas, dirname='.'):
+    neci_dm2 = read_neci_two_pdm_mrpt('{}/spinfree_TwoRDM.1'.format(os.path.abspath(dirname)), ncas)
     if nelecas.__class__==tuple:
         neci_dm1 = one_from_two_pdm(neci_dm2, sum(nelecas))
     else:
         neci_dm1 = one_from_two_pdm(neci_dm2, nelec)
-    neci_dm3 = read_neci_three_pdm_mrpt('spinfree_ThreeRDM.1', ncas)
+    neci_dm3 = read_neci_three_pdm_mrpt('{}/spinfree_ThreeRDM.1'.format(os.path.abspath(dirname)), ncas)
     return neci_dm1, neci_dm2, neci_dm3
 
-def full_nevpt2_intermediates_fciqmc(no_dm1, no_dm2, no_dm3, ncas, h2e):
-    neci_nevpt2_intermediate = read_neci_three_pdm_mrpt('spinfree_NEVPT2_AUX.1', ncas)
+def full_nevpt2_intermediates_fciqmc(no_dm1, no_dm2, no_dm3, ncas, h2e, dirname='.'):
+    neci_nevpt2_intermediate = read_neci_three_pdm_mrpt('{}/spinfree_NEVPT2_AUX.1'.format(os.path.abspath(dirname)), ncas)
     f3ac, f3ca = calc_lower_rank_part_of_intermediates(no_dm1, no_dm2, no_dm3, h2e)
     f3ac+=neci_nevpt2_intermediate.transpose(2, 3, 4, 0, 1, 5)
     f3ca+=neci_nevpt2_intermediate.transpose(0, 4, 3, 2, 5, 1)
     return f3ac, f3ca
 
+'''
+import sys
+sys.path.append('/scratch/scratch/mmm0043/work/pyscf_dev')
+from pyscf import gto, scf, mcscf, fci
 
+mol = gto.M(
+    atom = 'O 0 0 0; O 0 0 1.2',
+    basis = 'ccpvdz',
+    spin = 2)
 
+myhf = scf.RHF(mol)
+myhf.kernel()
 
+# 6 orbitals, 8 electrons
+mycas = mcscf.CASCI(myhf, 6, 8)
+mycas.kernel()
+
+dm1, dm2, dm3 = fci.rdm.make_dm123('FCI3pdm_kern_sf', mycas.ci, mycas.ci, mycas.ncas, mycas.nelecas)
+
+fci.rdm.reorder_dm123(dm1, dm2, dm3, inplace=True)
+
+print mycas.nelecas
+
+dm2_from_3 = two_from_three_pdm(dm3, sum(mycas.nelecas))
+
+print numpy.allclose(dm2/2, two_from_three_pdm(dm3, sum(mycas.nelecas)))
+'''
 
 
 

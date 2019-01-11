@@ -367,6 +367,7 @@ def make_a13(h1e,h2e,dm1,dm2,dm3):
 
 
 def Sr(mc,ci,dms, eris=None, verbose=None):
+    print '\tSr subspace...'
     #The subspace S_r^{(-1)}
     mo_core, mo_cas, mo_virt = _extract_orbs(mc, mc.mo_coeff)
     dm1 = dms['1']
@@ -411,6 +412,7 @@ def Sr(mc,ci,dms, eris=None, verbose=None):
     return _norm_to_energy(norm, ener, mc.mo_energy[mc.ncore+mc.ncas:])
 
 def Si(mc, ci, dms, eris=None, verbose=None):
+    print '\tSi subspace...'
     #Subspace S_i^{(1)}
     mo_core, mo_cas, mo_virt = _extract_orbs(mc, mc.mo_coeff)
     dm1 = dms['1']
@@ -460,6 +462,7 @@ def Si(mc, ci, dms, eris=None, verbose=None):
 
 
 def Sijrs(mc, eris, verbose=None):
+    print '\tSijrs subspace...'
     mo_core, mo_cas, mo_virt = _extract_orbs(mc, mc.mo_coeff)
     ncore = mo_core.shape[1]
     nvirt = mo_virt.shape[1]
@@ -487,6 +490,7 @@ def Sijrs(mc, eris, verbose=None):
     return norm, e
 
 def Sijr(mc, dms, eris, verbose=None):
+    print '\tSijr subspace...'
     #Subspace S_ijr^{(1)}
     mo_core, mo_cas, mo_virt = _extract_orbs(mc, mc.mo_coeff)
     dm1 = dms['1']
@@ -519,6 +523,7 @@ def Sijr(mc, dms, eris, verbose=None):
 
 def Srsi(mc, dms, eris, verbose=None):
     #Subspace S_ijr^{(1)}
+    print '\tSrsi subspace...'
     mo_core, mo_cas, mo_virt = _extract_orbs(mc, mc.mo_coeff)
     dm1 = dms['1']
     dm2 = dms['2']
@@ -543,6 +548,7 @@ def Srsi(mc, dms, eris, verbose=None):
     return _norm_to_energy(norm, h, diff)
 
 def Srs(mc, dms, eris=None, verbose=None):
+    print '\tSrs subspace...'
     #Subspace S_rs^{(-2)}
     mo_core, mo_cas, mo_virt = _extract_orbs(mc, mc.mo_coeff)
     dm1 = dms['1']
@@ -570,6 +576,7 @@ def Srs(mc, dms, eris=None, verbose=None):
     return _norm_to_energy(norm, h, diff)
 
 def Sij(mc, dms, eris, verbose=None):
+    print '\tSij subspace...'
     #Subspace S_ij^{(-2)}
     mo_core, mo_cas, mo_virt = _extract_orbs(mc, mc.mo_coeff)
     dm1 = dms['1']
@@ -611,6 +618,7 @@ def Sij(mc, dms, eris, verbose=None):
 
 
 def Sir(mc, dms, eris, verbose=None):
+    print '\tSir subspace...'
     #Subspace S_il^{(0)}
     mo_core, mo_cas, mo_virt = _extract_orbs(mc, mc.mo_coeff)
     dm1 = dms['1']
@@ -772,7 +780,10 @@ class NEVPT(lib.StreamObject):
             self.mo_coeff,_, self.mo_energy = self.canonicalize(self.mo_coeff,ci=self.load_ci(),verbose=self.verbose)
 
         if self.fcisolver.__class__ == fciqmcscf.FCIQMCCI:
-            dm1, dm2, dm3 = fciqmcscf.stochastic_mrpt.read_rdms_fciqmc(self.ncas, self.nelecas)
+            print 'Reading FCIQMC 1, 2, 3 RDMs...'
+            dm1, dm2, dm3 = fciqmcscf.stochastic_mrpt.read_rdms_fciqmc(self.ncas, self.nelecas, dirname=self.fcisolver.dirname)
+            self.partial_trace_error = fciqmcscf.stochastic_mrpt.partial_trace_error(dm3, dm2, self.nelecas)
+            self.hermiticity_error = fciqmcscf.stochastic_mrpt.hermiticity_error(dm3)
             if (not self.canonicalized):
                 self.mo_coeff,_, self.mo_energy = self.canonicalize(self.mo_coeff,ci=None,verbose=self.verbose,casdm1=dm1)
         elif hasattr(self.fcisolver, 'nevpt_intermediate'):
@@ -842,9 +853,14 @@ class NEVPT(lib.StreamObject):
             aaaa = eris['ppaa'][self.ncore:nocc,self.ncore:nocc].copy()
 
             if self.fcisolver.__class__ == fciqmcscf.FCIQMCCI:
-                f3ac, f3ca = fciqmcscf.stochastic_mrpt.full_nevpt2_intermediates_fciqmc(dm1, dm2, dm3, self.ncas, aaaa.transpose(0,2,1,3))
+                print 'Reading FCIQMC NEVPT2 intermediates...'
+                f3ac, f3ca = fciqmcscf.stochastic_mrpt.full_nevpt2_intermediates_fciqmc(dm1, dm2, dm3, self.ncas, aaaa.transpose(0,2,1,3), 
+                        dirname=self.fcisolver.dirname)
+                print 'complete'
                 # the dms are all normal ordered, so switch to product-of-single-excitation ordering
+                print 'Reordering FCIQMC RDMs from NORD to POSE...'
                 fciqmcscf.stochastic_mrpt.unreorder_dm123(dms['1'], dms['2'], dms['3'], inplace=True)
+                print 'complete'
 
             elif not hasattr(self.fcisolver, 'nevpt_intermediate'):
                 link_indexa = fci.cistring.gen_linkstr_index(range(self.ncas), self.nelecas[0])
@@ -859,6 +875,9 @@ class NEVPT(lib.StreamObject):
 
         time1 = log.timer('eri-4pdm contraction', *time1)
 
+        print 'Starting tensor contraction...'
+        isubspace = 0
+        nsubspace = 8
         if self.compressed_mps:
             from pyscf.dmrgscf.nevpt_mpi import DMRG_COMPRESS_NEVPT
             if self.stored_integral: #Stored perturbation integral and read them again. For debugging purpose.
@@ -883,27 +902,43 @@ class NEVPT(lib.StreamObject):
             logger.note(self, "Si    (+1)',   E = %.14f",  e_Si  )
 
         else:
+            isubspace+=1
+            print '\t{}/{}'.format(isubspace, nsubspace)
             norm_Sr   , e_Sr    = Sr(self, self.load_ci(), dms, eris)
             logger.note(self, "Sr    (-1)',   E = %.14f",  e_Sr  )
             time1 = log.timer("space Sr (-1)'", *time1)
+            isubspace+=1
+            print '\t{}/{}'.format(isubspace, nsubspace)
             norm_Si   , e_Si    = Si(self, self.load_ci(), dms, eris)
             logger.note(self, "Si    (+1)',   E = %.14f",  e_Si  )
             time1 = log.timer("space Si (+1)'", *time1)
+        isubspace+=1
+        print '\t{}/{}'.format(isubspace, nsubspace)
         norm_Sijrs, e_Sijrs = Sijrs(self, eris)
         logger.note(self, "Sijrs (0)  ,   E = %.14f", e_Sijrs)
         time1 = log.timer('space Sijrs (0)', *time1)
+        isubspace+=1
+        print '\t{}/{}'.format(isubspace, nsubspace)
         norm_Sijr , e_Sijr  = Sijr(self, dms, eris)
         logger.note(self, "Sijr  (+1) ,   E = %.14f",  e_Sijr)
         time1 = log.timer('space Sijr (+1)', *time1)
+        isubspace+=1
+        print '\t{}/{}'.format(isubspace, nsubspace)
         norm_Srsi , e_Srsi  = Srsi(self, dms, eris)
         logger.note(self, "Srsi  (-1) ,   E = %.14f",  e_Srsi)
+        isubspace+=1
+        print '\t{}/{}'.format(isubspace, nsubspace)
         time1 = log.timer('space Srsi (-1)', *time1)
         norm_Srs  , e_Srs   = Srs(self, dms, eris)
         logger.note(self, "Srs   (-2) ,   E = %.14f",  e_Srs )
         time1 = log.timer('space Srs (-2)', *time1)
+        isubspace+=1
+        print '\t{}/{}'.format(isubspace, nsubspace)
         norm_Sij  , e_Sij   = Sij(self, dms, eris)
         logger.note(self, "Sij   (+2) ,   E = %.14f",  e_Sij )
         time1 = log.timer('space Sij (+2)', *time1)
+        isubspace+=1
+        print '\t{}/{}'.format(isubspace, nsubspace)
         norm_Sir  , e_Sir   = Sir(self, dms, eris)
         logger.note(self, "Sir   (0)' ,   E = %.14f",  e_Sir )
         time1 = log.timer("space Sir (0)'", *time1)
