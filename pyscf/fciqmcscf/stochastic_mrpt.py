@@ -120,7 +120,7 @@ def two_from_three_pdm(three_pdm, nelec):
 
 def three_from_four_pdm(four_pdm, nelec):
     # Last two indices refer to middle two second quantized operators in the 4RDM
-    three_pdm = numpy.einsum('ikjlmnpp->ijklmn', four_pdm)
+    three_pdm = numpy.einsum('ikjlmnpp->ikjlmn', four_pdm)
     three_pdm /= (numpy.sum(nelec)-3)
     return three_pdm
 
