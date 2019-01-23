@@ -784,8 +784,11 @@ class NEVPT(lib.StreamObject):
             dm1, dm2, dm3 = fciqmcscf.stochastic_mrpt.read_rdms_fciqmc(self.ncas, self.nelecas, dirname=self.fcisolver.dirname)
             self.partial_trace_error = fciqmcscf.stochastic_mrpt.partial_trace_error(dm3, dm2, self.nelecas)
             self.hermiticity_error = fciqmcscf.stochastic_mrpt.hermiticity_error(dm3)
+            print 'FCIQMC 1, 2, 3 RDMs read successfully.'
             if (not self.canonicalized):
+                print 'Canonicalizing...'
                 self.mo_coeff,_, self.mo_energy = self.canonicalize(self.mo_coeff,ci=None,verbose=self.verbose,casdm1=dm1)
+                print 'Canonicalized successfully.'
         elif hasattr(self.fcisolver, 'nevpt_intermediate'):
             logger.info(self, 'DMRG-NEVPT')
             dm1, dm2, dm3 = self.fcisolver._make_dm123(self.load_ci(),self.ncas,self.nelecas,None)
@@ -844,7 +847,12 @@ class NEVPT(lib.StreamObject):
         else:
             eris = _ERIS(self, self.mo_coeff)
         '''
+        print 'Starting integral transformation...'
         eris = _ERIS(self, self.mo_coeff)
+        #import pickle
+        #with open('casci.pkl', 'rb') as f: eris = pickle.load(f)['eris']
+
+        print 'Integral transformation completed successfully...'
 
         time1 = log.timer('integral transformation', *time1)
         nocc = self.ncore + self.ncas
@@ -856,7 +864,7 @@ class NEVPT(lib.StreamObject):
                 print 'Reading FCIQMC NEVPT2 intermediates...'
                 f3ac, f3ca = fciqmcscf.stochastic_mrpt.full_nevpt2_intermediates_fciqmc(dm1, dm2, dm3, self.ncas, aaaa.transpose(0,2,1,3), 
                         dirname=self.fcisolver.dirname)
-                print 'complete'
+                print 'FCIQMC NEVPT2 intermediates read successfully.'
                 # the dms are all normal ordered, so switch to product-of-single-excitation ordering
                 print 'Reordering FCIQMC RDMs from NORD to POSE...'
                 fciqmcscf.stochastic_mrpt.unreorder_dm123(dms['1'], dms['2'], dms['3'], inplace=True)

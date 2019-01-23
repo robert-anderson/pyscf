@@ -1,110 +1,38 @@
 import numpy
 import os
 
-def read_neci_two_pdm_mrpt(filename, norb, directory='.'):
-    f = open(os.path.join(directory, filename), 'r')
-    norb_active = norb
-    two_pdm_active = numpy.zeros( (norb_active, norb_active, norb_active, norb_active) )
-    for line in f.readlines():
-        linesp = line.split()
+class NdList:
+    def __init__(self, shape):
+        self.shape = shape
+        self.rank = len(self.shape)
+        self.partials = list(numpy.cumprod(shape[::-1]))[::-1][1:]+[1]
+        self.n = numpy.prod(shape)
+        self.data = [0 for i in range(self.n)]
+    def shaped_to_flat(self, inds):
+        return numpy.sum(self.partials[i]*inds[i] for i in range(self.rank))
+    def set(self, inds, value):
+        self.data[self.shaped_to_flat(inds)] = value
+    def get(self, inds):
+        return self.data[self.shaped_to_flat(inds)]
+    def to_numpy(self):
+        return numpy.reshape(numpy.array(self.data), self.shape)
 
-        if(int(linesp[0]) != -1):
-            # Arrays from neci are '1' indexed
-            # We reorder from D[i,j,k,l] = < i^+ j^+ l k >
-            # to              D[i,j,k,l] = < i^+ k^+ l j > to match pyscf
-            # Therefore, all we need to do is to swap the middle two indices.
-            ind1 = int(linesp[0]) - 1
-            ind2 = int(linesp[2]) - 1
-            ind3 = int(linesp[1]) - 1
-            ind4 = int(linesp[3]) - 1
-            assert(int(ind1) < norb_active)
-            assert(int(ind2) < norb_active)
-            assert(int(ind3) < norb_active)
-            assert(int(ind4) < norb_active)
-            assert(ind1 >= 0)
-            assert(ind2 >= 0)
-            assert(ind3 >= 0)
-            assert(ind4 >= 0)
-
-            two_pdm_active[ind1, ind2, ind3, ind4] = float(linesp[4])
-
-    f.close()
-    return two_pdm_active
-
-def read_neci_three_pdm_mrpt(filename, norb, directory='.'):
-    f = open(os.path.join(directory, filename), 'r')
-    norb_active = norb
-    three_pdm_active = numpy.zeros( (norb_active,)*6)
-    for line in f.readlines():
-        linesp = line.split()
-
-        if(int(linesp[0]) != -1):
-            # Arrays from neci are '1' indexed
-            # We reorder from D[i,j,k,l] = < i^+ j^+ l k >
-            # to              D[i,j,k,l] = < i^+ k^+ l j > to match pyscf
-            # Therefore, all we need to do is to swap the middle two indices.
-            ind1 = int(linesp[0]) - 1
-            ind2 = int(linesp[3]) - 1
-            ind3 = int(linesp[1]) - 1
-            ind4 = int(linesp[4]) - 1
-            ind5 = int(linesp[2]) - 1
-            ind6 = int(linesp[5]) - 1
-            assert(int(ind1) < norb_active)
-            assert(int(ind2) < norb_active)
-            assert(int(ind3) < norb_active)
-            assert(int(ind4) < norb_active)
-            assert(int(ind5) < norb_active)
-            assert(int(ind6) < norb_active)
-            assert(ind1 >= 0)
-            assert(ind2 >= 0)
-            assert(ind3 >= 0)
-            assert(ind4 >= 0)
-            assert(ind5 >= 0)
-            assert(ind6 >= 0)
-
-            three_pdm_active[ind1, ind2, ind3, ind4, ind5, ind6] = float(linesp[6])
-
-    f.close()
-    return three_pdm_active
-
-def read_neci_four_pdm_mrpt(filename, norb, directory='.'):
-    f = open(os.path.join(directory, filename), 'r')
-    norb_active = norb
-    four_pdm_active = numpy.zeros( (norb_active,)*8 )
-    for line in f.readlines():
-        linesp = line.split()
-
-        if(int(linesp[0]) != -1):
-            # Arrays from neci are '1' indexed
-            ind1 = int(linesp[0]) - 1
-            ind2 = int(linesp[4]) - 1
-            ind3 = int(linesp[1]) - 1
-            ind4 = int(linesp[5]) - 1
-            ind5 = int(linesp[2]) - 1
-            ind6 = int(linesp[6]) - 1
-            ind7 = int(linesp[3]) - 1
-            ind8 = int(linesp[7]) - 1
-            assert(int(ind1) < norb_active)
-            assert(int(ind2) < norb_active)
-            assert(int(ind3) < norb_active)
-            assert(int(ind4) < norb_active)
-            assert(int(ind5) < norb_active)
-            assert(int(ind6) < norb_active)
-            assert(int(ind7) < norb_active)
-            assert(int(ind8) < norb_active)
-            assert(ind1 >= 0)
-            assert(ind2 >= 0)
-            assert(ind3 >= 0)
-            assert(ind4 >= 0)
-            assert(ind5 >= 0)
-            assert(ind6 >= 0)
-            assert(ind7 >= 0)
-            assert(ind8 >= 0)
-
-            four_pdm_active[ind1, ind2, ind3, ind4, ind5, ind6, ind7, ind8] = float(linesp[8])
-
-    f.close()
-    return four_pdm_active
+def read_neci_pdm_mrpt(filename, norb, directory='.'):
+    path = os.path.join(directory, filename)
+    with open(path, 'r') as f:
+        rank = (len(f.readline().strip().split())-1)/2
+    rdm = NdList((norb,)*(2*rank))
+    inds = []
+    for i in range(rank):
+        inds.append(i)
+        inds.append(rank+i)
+    with open(path, 'r') as f:
+        for line in f.readlines():
+            linesp = line.strip().split()
+            if int(linesp[0]) < 0:
+                continue
+            rdm.set(tuple(int(linesp[i])-1 for i in inds), float(linesp[-1]))
+    return rdm.to_numpy()
 
 def one_from_two_pdm(two_pdm, nelec):
     # Last two indices refer to middle two second quantized operators in the 2RDM
@@ -274,16 +202,16 @@ def hermiticity_error(dm3):
     return numpy.linalg.norm(dm3.transpose(1,0,3,2,5,4)-dm3.transpose())
 
 def read_rdms_fciqmc(ncas, nelecas, dirname='.'):
-    neci_dm2 = read_neci_two_pdm_mrpt('{}/spinfree_TwoRDM.1'.format(os.path.abspath(dirname)), ncas)
+    neci_dm2 = read_neci_pdm_mrpt('{}/spinfree_TwoRDM.1'.format(os.path.abspath(dirname)), ncas)
     if nelecas.__class__==tuple:
         neci_dm1 = one_from_two_pdm(neci_dm2, sum(nelecas))
     else:
         neci_dm1 = one_from_two_pdm(neci_dm2, nelec)
-    neci_dm3 = read_neci_three_pdm_mrpt('{}/spinfree_ThreeRDM.1'.format(os.path.abspath(dirname)), ncas)
+    neci_dm3 = read_neci_pdm_mrpt('{}/spinfree_ThreeRDM.1'.format(os.path.abspath(dirname)), ncas)
     return neci_dm1, neci_dm2, neci_dm3
 
 def full_nevpt2_intermediates_fciqmc(no_dm1, no_dm2, no_dm3, ncas, h2e, dirname='.'):
-    neci_nevpt2_intermediate = read_neci_three_pdm_mrpt('{}/spinfree_NEVPT2_AUX.1'.format(os.path.abspath(dirname)), ncas)
+    neci_nevpt2_intermediate = read_neci_pdm_mrpt('{}/spinfree_NEVPT2_AUX.1'.format(os.path.abspath(dirname)), ncas)
     f3ac, f3ca = calc_lower_rank_part_of_intermediates(no_dm1, no_dm2, no_dm3, h2e)
     f3ac+=neci_nevpt2_intermediate.transpose(2, 3, 4, 0, 1, 5)
     f3ca+=neci_nevpt2_intermediate.transpose(0, 4, 3, 2, 5, 1)
