@@ -63,42 +63,42 @@ def calc_lower_rank_part_of_intermediates(rdm1, rdm2, rdm3, h2e):
     norb = rdm1.shape[0]
     #rdm4 = numpy.zeros((norb,)*8)
     for iorb in range(norb):
-	#rdm4[:,iorb,:,:,:,:,iorb,:] += rdm3.transpose(0,2,3,4,5,1)
-	# i == p == iorb
-	f3ac[iorb,:,:,:,:,:] += numpy.einsum('qra,kbjqcr->jkabc', h2e[iorb,:,:,:], rdm3.transpose(0,2,3,4,5,1))
-	# i == r == iorb
+        #rdm4[:,iorb,:,:,:,:,iorb,:] += rdm3.transpose(0,2,3,4,5,1)
+        # i == p == iorb
+        f3ac[iorb,:,:,:,:,:] += numpy.einsum('qra,kbjqcr->jkabc', h2e[iorb,:,:,:], rdm3.transpose(0,2,3,4,5,1))
+        # i == r == iorb
         f3ca[iorb,:,:,:,:,:] += numpy.einsum('cpq,kbjaqp->jkabc', h2e[iorb,:,:,:], rdm3.transpose(0,2,3,4,5,1))
-
-       	#rdm4[:,:,:,iorb,:,:,iorb,:] += rdm3.transpose(0,1,2,4,5,3)
-	# j == p == iorb
-    	f3ac[:,iorb,:,:,:,:] += numpy.einsum('qra,kibqcr->ikabc', h2e[iorb,:,:,:], rdm3.transpose(0,1,2,4,5,3))
-	# j == r == iorb
+        
+        #rdm4[:,:,:,iorb,:,:,iorb,:] += rdm3.transpose(0,1,2,4,5,3)
+        # j == p == iorb
+        f3ac[:,iorb,:,:,:,:] += numpy.einsum('qra,kibqcr->ikabc', h2e[iorb,:,:,:], rdm3.transpose(0,1,2,4,5,3))
+        # j == r == iorb
         f3ca[:,iorb,:,:,:,:] += numpy.einsum('cpq,kibaqp->ikabc', h2e[iorb,:,:,:], rdm3.transpose(0,1,2,4,5,3))
-
-	#rdm4[:,:,:,:,:,iorb,iorb,:] += rdm3
-	# c == p == iorb
-    	f3ac[:,:,:,:,:,iorb] += numpy.einsum('qra,kibjqr->ijkab', h2e[iorb,:,:,:], rdm3)
-	# q == r == iorb
+        
+        #rdm4[:,:,:,:,:,iorb,iorb,:] += rdm3
+        # c == p == iorb
+        f3ac[:,:,:,:,:,iorb] += numpy.einsum('qra,kibjqr->ijkab', h2e[iorb,:,:,:], rdm3)
+        # q == r == iorb
         f3ca += numpy.einsum('cp,kibjap->ijkabc', h2e[iorb,:,:,iorb], rdm3)
-		
-       	#rdm4[:,iorb,:,:,iorb,:,:,:] += rdm3.transpose(0,2,3,1,4,5)
-	# i == q == iorb
-    	f3ac[iorb,:,:,:,:,:] += numpy.einsum('pra,kbjcpr->jkabc', h2e[:,iorb,:,:], rdm3.transpose(0,2,3,1,4,5))
-	# i == a == iorb
+        
+        #rdm4[:,iorb,:,:,iorb,:,:,:] += rdm3.transpose(0,2,3,1,4,5)
+        # i == q == iorb
+        f3ac[iorb,:,:,:,:,:] += numpy.einsum('pra,kbjcpr->jkabc', h2e[:,iorb,:,:], rdm3.transpose(0,2,3,1,4,5))
+        # i == a == iorb
         f3ca[iorb,:,:,iorb,:,:] += numpy.einsum('rcpq,kbjqrp->jkbc', h2e, rdm3.transpose(0,2,3,1,4,5))
         
-	#rdm4[:,:,:,iorb,iorb,:,:,:] += rdm3
-	# j == q == iorb
-    	f3ac[:,iorb,:,:,:,:] += numpy.einsum('pra,kibcpr->ikabc', h2e[:,iorb,:,:], rdm3)
-	# j == a == iorb
+        #rdm4[:,:,:,iorb,iorb,:,:,:] += rdm3
+        # j == q == iorb
+        f3ac[:,iorb,:,:,:,:] += numpy.einsum('pra,kibcpr->ikabc', h2e[:,iorb,:,:], rdm3)
+        # j == a == iorb
         f3ca[:,iorb,:,iorb,:,:] += numpy.einsum('rcpq,kibqrp->ikbc', h2e, rdm3)
-
-       	#rdm4[:,iorb,iorb,:,:,:,:,:] += rdm3
-	# i == b == iorb
+        
+        #rdm4[:,iorb,iorb,:,:,:,:,:] += rdm3
+        # i == b == iorb
         f3ac[iorb,:,:,:,iorb,:] += numpy.einsum('pqra,kjqcpr->jkac', h2e, rdm3)
-	# i == b == iorb
+        # i == b == iorb
         f3ca[iorb,:,:,:,iorb,:] += numpy.einsum('rcpq,kjaqrp->jkac', h2e, rdm3)
-
+        
         for jorb in range(norb):
             #rdm4[:,iorb,iorb,jorb,:,:,jorb,:] += rdm2.transpose(0,2,3,1)
             # i == b == iorb
@@ -107,8 +107,8 @@ def calc_lower_rank_part_of_intermediates(rdm1, rdm2, rdm3, h2e):
             # i == b == iorb
             # j == r == jorb
             f3ca[iorb,jorb,:,:,iorb,:] += numpy.einsum('cpq,kaqp->kac', h2e[jorb,:,:,:], rdm2.transpose(0,2,3,1))
-
-	    #rdm4[:,iorb,iorb,:,:,jorb,jorb,:] += rdm2
+            
+            #rdm4[:,iorb,iorb,:,:,jorb,jorb,:] += rdm2
             # i == b == iorb
             # c == p == jorb
             f3ac[iorb,:,:,:,iorb,jorb] += numpy.einsum('qra,kjqr->jka', h2e[jorb,:,:,:], rdm2)
@@ -123,41 +123,41 @@ def calc_lower_rank_part_of_intermediates(rdm1, rdm2, rdm3, h2e):
             # i == a == iorb
             # q == r == jorb
             f3ca[iorb,:,:,iorb,:,:] += numpy.einsum('cp,kbjp->jkbc', h2e[jorb,:,:,jorb], rdm2.transpose(0,2,3,1))
-
-	    #rdm4[:,iorb,:,jorb,iorb,:,jorb,:] += rdm2.transpose(0,2,1,3)
+            
+            #rdm4[:,iorb,:,jorb,iorb,:,jorb,:] += rdm2.transpose(0,2,1,3)
             # i == q == iorb
             # j == p == jorb
             f3ac[iorb,jorb,:,:,:,:] += numpy.einsum('ra,kbcr->kabc', h2e[jorb,iorb,:,:], rdm2.transpose(0,2,1,3))
             # i == a == iorb
             # j == r == jorb
             f3ca[iorb,jorb,:,iorb,:,:] += numpy.einsum('cpq,kbqp->kbc', h2e[jorb,:,:,:], rdm2.transpose(0,2,1,3))
-
-	    #rdm4[:,iorb,:,jorb,jorb,:,iorb,:] += rdm2.transpose(0,2,3,1)
+            
+            #rdm4[:,iorb,:,jorb,jorb,:,iorb,:] += rdm2.transpose(0,2,3,1)
             # i == p == iorb
             # j == q == jorb
             f3ac[iorb,jorb,:,:,:,:] += numpy.einsum('ra,kbcr->kabc', h2e[iorb,jorb,:,:], rdm2.transpose(0,2,3,1))
             # i == r == iorb
             # j == a == jorb
             f3ca[iorb,jorb,:,jorb,:,:] += numpy.einsum('cpq,kbqp->kbc', h2e[iorb,:,:,:], rdm2.transpose(0,2,3,1))
-
-	    #rdm4[:,:,:,jorb,jorb,iorb,iorb,:] += rdm2
+            
+            #rdm4[:,:,:,jorb,jorb,iorb,iorb,:] += rdm2
             # c == p == iorb
             # j == q == jorb
             f3ac[:,jorb,:,:,:,iorb] += numpy.einsum('ra,kibr->ikab', h2e[iorb,jorb,:,:], rdm2)
             # q == r == iorb
             # j == a == jorb
             f3ca[:,jorb,:,jorb,:,:] += numpy.einsum('cp,kibp->ikbc', h2e[iorb,:,:,iorb], rdm2)
-
-	    #rdm4[:,iorb,iorb,jorb,jorb,:,:,:] += rdm2
+            
+            #rdm4[:,iorb,iorb,jorb,jorb,:,:,:] += rdm2
             # i == b == iorb
             # j == q == jorb
             f3ac[iorb,jorb,:,:,iorb,:] += numpy.einsum('pra,kcpr->kac', h2e[:,jorb,:,:], rdm2)
             # i == b == iorb
             # j == a == jorb
             f3ca[iorb,jorb,:,jorb,iorb,:] += numpy.einsum('rcpq,kqrp->kc', h2e, rdm2)
-
-	    for korb in range(norb):
-	        #rdm4[:,iorb,iorb,jorb,jorb,korb,korb,:] += rdm1
+            
+            for korb in range(norb):
+                #rdm4[:,iorb,iorb,jorb,jorb,korb,korb,:] += rdm1
                 # i == b == iorb
                 # j == q == jorb
                 # c == p == korb
