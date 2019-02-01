@@ -58,7 +58,7 @@ def tearDownModule():
     cell.stdout.close()
     del cell, kmf, kumf
 
-class KnowValues(unittest.TestCase):
+class KnownValues(unittest.TestCase):
     def test_analyze(self):
         rpop, rchg = kmf.analyze() # pop at gamma point
         upop, uchg = kumf.analyze()
@@ -126,8 +126,6 @@ class KnowValues(unittest.TestCase):
     def test_krhf(self):
         self.assertAlmostEqual(kmf.e_tot, -11.218735269838586, 8)
 
-        self.assertAlmostEqual(kmf.get_fermi(), -0.84871128782161442, 8)
-
     def test_kuhf(self):
         self.assertAlmostEqual(kumf.e_tot, -11.218735269838586, 8)
 
@@ -144,6 +142,7 @@ class KnowValues(unittest.TestCase):
                    mesh = [8,20,20],
                    atom = '''He 2 0 0; He 3 0 0''',
                    dimension = 1,
+                   low_dim_ft_type = 'inf_vacuum',
                    verbose = 0,
                    basis = { 'He': [[0, (0.8, 1.0)],
                                     #[0, (1.0, 1.0)],
@@ -165,6 +164,7 @@ class KnowValues(unittest.TestCase):
                    mesh = [10,10,20],
                    atom = '''He 2 0 0; He 3 0 0''',
                    dimension = 2,
+                   low_dim_ft_type = 'inf_vacuum',
                    verbose = 0,
                    basis = { 'He': [[0, (0.8, 1.0)],
                                     #[0, (1.0, 1.0)],
@@ -186,6 +186,7 @@ class KnowValues(unittest.TestCase):
                    mesh = [8,20,20],
                    atom = '''He 2 0 0; He 3 0 0''',
                    dimension = 1,
+                   low_dim_ft_type = 'inf_vacuum',
                    verbose = 0,
                    basis = { 'He': [[0, (0.8, 1.0)],
                                     #[0, (1.0, 1.0)],
@@ -207,6 +208,7 @@ class KnowValues(unittest.TestCase):
                    mesh = [8,20,20],
                    atom = '''He 2 0 0; He 3 0 0''',
                    dimension = 1,
+                   low_dim_ft_type = 'inf_vacuum',
                    verbose = 0,
                    basis = { 'He': [[0, (0.8, 1.0)],
                                     #[0, (1.0, 1.0)],
@@ -219,6 +221,57 @@ class KnowValues(unittest.TestCase):
         mf.kpts = cell.make_kpts([2,1,1])
         e1 = mf.kernel()
         self.assertAlmostEqual(e1, -3.5112358424228809, 4)
+
+    def test_get_fermi(self):
+        self.assertAlmostEqual(kmf.get_fermi(), 0.33154831914017424, 8)
+
+        def occ_vir(nocc, nvir):
+            occ = np.zeros(nocc+nvir)
+            occ[:nocc] = 1
+            return occ
+        mo_e_kpts = [np.arange(5), np.arange(2, 6)]
+        mo_occ_kpts = [occ_vir(2, 3)*2, occ_vir(2, 2)*2]
+        f = kmf.get_fermi(mo_e_kpts, mo_occ_kpts)
+        self.assertAlmostEqual(f, 2, 9)
+
+        # Smearing with error
+        mo_occ_kpts[0][1:3] = 1.000001
+        f = kmf.get_fermi(mo_e_kpts, mo_occ_kpts)
+        self.assertAlmostEqual(f, 2, 9)
+
+        mo_e_kpts = [mo_e_kpts, [x-.5 for x in mo_e_kpts]]
+        mo_occ_kpts = [[occ_vir(3, 2), occ_vir(2, 2)],
+                       [occ_vir(2, 3), occ_vir(1, 3)]]
+        f = kumf.get_fermi(mo_e_kpts, mo_occ_kpts)
+        self.assertAlmostEqual(f[0], 3, 9)
+        self.assertAlmostEqual(f[1], 1.5, 9)
+
+        # Smearing with error
+        mo_occ_kpts[0][0][2:4] = 0.500001
+        mo_occ_kpts[1][1][0] -= 0.0000001
+        f = kumf.get_fermi(mo_e_kpts, mo_occ_kpts)
+        self.assertAlmostEqual(f[0], 3, 9)
+        self.assertAlmostEqual(f[1], 1.5, 9)
+
+    def test_dipole_moment(self):
+        dip = kmf.dip_moment()
+        self.assertAlmostEqual(lib.finger(dip), 0.729751581497479, 9)
+
+    def test_krhf_vs_rhf(self):
+        np.random.seed(1)
+        k = np.random.random(3)
+        mf = pscf.RHF(cell, k, exxdiv='vcut_sph')
+        mf.max_cycle = 1
+        mf.diis = None
+        e1 = mf.kernel()
+
+        kmf = pscf.KRHF(cell, [k], exxdiv='vcut_sph')
+        kmf.max_cycle = 1
+        kmf.diis = None
+        e2 = kmf.kernel()
+        self.assertAlmostEqual(e1, e2, 9)
+        self.assertAlmostEqual(e1, -11.451354250609718, 9)
+
 
 if __name__ == '__main__':
     print("Full Tests for pbc.scf.khf")

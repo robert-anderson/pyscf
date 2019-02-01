@@ -123,7 +123,7 @@ class DMRGCI(lib.StreamObject):
         self.integralFile = "FCIDUMP"
         self.configFile = "dmrg.conf"
         self.outputFile = "dmrg.out"
-        if hasattr(settings, 'BLOCKRUNTIMEDIR'):
+        if getattr(settings, 'BLOCKRUNTIMEDIR', None):
             self.runtimeDir = settings.BLOCKRUNTIMEDIR
         else:
             self.runtimeDir = '.'
@@ -156,12 +156,12 @@ class DMRGCI(lib.StreamObject):
         self.spin = 0
         self.orbsym = []
         if mol is None:
-          self.groupname = None
-        else:
-          if mol.symmetry:
-            self.groupname = mol.groupname
-          else:
             self.groupname = None
+        else:
+            if mol.symmetry:
+                self.groupname = mol.groupname
+            else:
+                self.groupname = None
         ##################################################
         # don't modify the following attributes, if you do not finish part of calculation, which can be reused.
         #DO NOT CHANGE these parameters, unless you know the code in details
@@ -177,6 +177,22 @@ class DMRGCI(lib.StreamObject):
         self.returnInt = False
         self._keys = set(self.__dict__.keys())
 
+
+    @property
+    def max_memory(self):
+        if self.memory is None:
+            return self.memory
+        elif isinstance(self.memory, int):
+            return self.memory * 1e3 # GB -> MB
+        else:  # str
+            val, unit = self.memory.split(',')
+            if unit.trim().upper() == 'G':
+                return float(val) * 1e3
+            else: # MB
+                return float(val)
+    @max_memory.setter
+    def max_memory(self, x):
+        self.memory = x * 1e-3
 
     @property
     def threads(self):
@@ -462,7 +478,7 @@ class DMRGCI(lib.StreamObject):
           #   using "libunpack.unpackE3" (see lib/icmpspt/icmpspt.c)
           # - BLOCK just writes a list of all values, this is directly read
           #   using "unpackE3_BLOCK" (see below)
-          if 'stackblock' in settings.BLOCKEXE:
+          if block_version(self.executable).startswith('1.5'):
             print('Reading binary 3RDM from STACKBLOCK')
             fname = os.path.join(self.scratchDirectory,"node0", "spatial_threepdm.%d.%d.bin" %(state, state))
             fnameout = os.path.join(self.scratchDirectory,"node0", "spatial_threepdm.%d.%d.bin.unpack" %(state, state))
@@ -541,7 +557,7 @@ class DMRGCI(lib.StreamObject):
           #   using "libunpack.unpackE4" (see lib/icmpspt/icmpspt.c)
           # - BLOCK just writes a list of all values, this is directly read
           #   using "unpackE4_BLOCK" (see below)
-          if 'stackblock' in settings.BLOCKEXE:
+          if block_version(self.executable).startswith('1.5'):
             print('Reading binary 4RDM from STACKBLOCK')
             fname = os.path.join(self.scratchDirectory,"node0", "spatial_fourpdm.%d.%d.bin" %(state, state))
             fnameout = os.path.join(self.scratchDirectory,"node0", "spatial_fourpdm.%d.%d.bin.unpack" %(state, state))
@@ -905,7 +921,7 @@ def executeBLOCK(DMRGCI):
     except CalledProcessError as err:
         logger.error(DMRGCI, cmd)
         outFile = os.path.join(DMRGCI.runtimeDir, outFile)
-        DMRGCI.stdout.write(check_output(['tail', '-100', outFile]))
+        DMRGCI.stdout.write(check_output(['tail', '-100', outFile]).decode())
         raise err
 
 def readEnergy(DMRGCI):
@@ -922,7 +938,7 @@ def readEnergy(DMRGCI):
 def DMRGSCF(mf, norb, nelec, maxM=1000, tol=1.e-8, *args, **kwargs):
     '''Shortcut function to setup CASSCF using the DMRG solver.  The DMRG
     solver is properly initialized in this function so that the 1-step
-    algorithm can applied with DMRG-CASSCF.
+    algorithm can be applied with DMRG-CASSCF.
 
     Examples:
 
@@ -932,10 +948,10 @@ def DMRGSCF(mf, norb, nelec, maxM=1000, tol=1.e-8, *args, **kwargs):
     >>> mc.kernel()
     -74.414908818611522
     '''
-    if (hasattr(mf,'with_df')):
-      mc = mcscf.DFCASSCF(mf, norb, nelec, *args, **kwargs)
+    if getattr(mf, 'with_df', None):
+        mc = mcscf.DFCASSCF(mf, norb, nelec, *args, **kwargs)
     else:
-      mc = mcscf.CASSCF(mf, norb, nelec, *args, **kwargs)
+        mc = mcscf.CASSCF(mf, norb, nelec, *args, **kwargs)
     mc.fcisolver = DMRGCI(mf.mol, maxM, tol=tol)
     mc.callback = mc.fcisolver.restart_scheduler_()
     if mc.chkfile == mc._scf._chkfile.name:

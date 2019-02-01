@@ -27,6 +27,7 @@ from pyscf.pbc import lib as pbclib
 from pyscf.pbc.dft import gen_grid
 from pyscf.pbc.dft import numint
 from pyscf.pbc import tools
+from pyscf.pbc.lib import kpts_helper
 
 #einsum = np.einsum
 einsum = lib.einsum
@@ -590,7 +591,11 @@ def finger(a):
     w = np.cos(np.arange(a.size))
     return np.dot(w, a.ravel())
 
-class KnowValues(unittest.TestCase):
+def tearDownModule():
+    global cell, cell1, cell2, kpts, kpt0, kpts1, mf0
+    del cell, cell1, cell2, kpts, kpt0, kpts1, mf0
+
+class KnownValues(unittest.TestCase):
     def test_get_nuc(self):
         v0 = get_nuc(cell, kpts[0])
         v1 = fft.FFTDF(cell).get_nuc(kpts)
@@ -673,6 +678,18 @@ class KnowValues(unittest.TestCase):
         dms = lib.tag_array(lib.asarray(dms), mo_coeff=mo_coeff, mo_occ=mo_occ)
         vk1 = df.get_jk(dms, kpts=kpts, kpts_band=kpts_band, exxdiv=None)[1]
         self.assertAlmostEqual(lib.finger(vk1), 10.239828255099447+2.1190549216896182j, 9)
+
+    def test_get_j_non_hermitian(self):
+        kpt = kpts[0]
+        numpy.random.seed(2)
+        nao = cell2.nao
+        dm = numpy.random.random((nao,nao))
+        mydf = fft.FFTDF(cell2)
+        v1 = mydf.get_jk(dm, hermi=0, kpts=kpts[1], with_k=False)[0]
+        eri = mydf.get_eri([kpts[1]]*4).reshape(nao,nao,nao,nao)
+        ref = numpy.einsum('ijkl,ji->kl', eri, dm)
+        self.assertAlmostEqual(abs(ref - v1).max(), 0, 12)
+        self.assertTrue(abs(ref-ref.T.conj()).max() > 1e-5)
 
     def test_get_ao_eri(self):
         df = fft.FFTDF(cell)
@@ -801,6 +818,51 @@ class KnowValues(unittest.TestCase):
         eri_mo1 = df.get_mo_eri(mos, kpts1)
         self.assertTrue(np.allclose(eri_mo1, eri_mo0, atol=1e-9, rtol=1e-9))
 
+    def test_ao2mo_7d(self):
+        L = 3.
+        n = 6
+        cell = pgto.Cell()
+        cell.a = numpy.diag([L,L,L])
+        cell.mesh = [n,n,n]
+        cell.atom = '''He    2.    2.2      2.
+                       He    1.2   1.       1.'''
+        cell.basis = {'He': [[0, (1.2, 1)], [1, (0.6, 1)]]}
+        cell.verbose = 0
+        cell.build(0,0)
+
+        kpts = cell.make_kpts([1,3,1])
+        nkpts = len(kpts)
+        nao = cell.nao_nr()
+        numpy.random.seed(1)
+        mo =(numpy.random.random((nkpts,nao,nao)) +
+             numpy.random.random((nkpts,nao,nao))*1j)
+
+        with_df = fft.FFTDF(cell, kpts)
+        out = with_df.ao2mo_7d(mo, kpts)
+        ref = numpy.empty_like(out)
+
+        kconserv = kpts_helper.get_kconserv(cell, kpts)
+        for ki, kj, kk in kpts_helper.loop_kkk(nkpts):
+            kl = kconserv[ki, kj, kk]
+            tmp = with_df.ao2mo((mo[ki], mo[kj], mo[kk], mo[kl]), kpts[[ki,kj,kk,kl]])
+            ref[ki,kj,kk] = tmp.reshape([nao]*4)
+
+        self.assertAlmostEqual(abs(out-ref).max(), 0, 12)
+
+    def test_get_jk_with_casscf(self):
+        from pyscf import mcscf
+        pcell = cell2.copy()
+        pcell.verbose = 0
+        pcell.mesh = [8]*3
+        mf = pbcscf.RHF(pcell)
+        mf.exxdiv = None
+        ehf = mf.kernel()
+
+        mc = mcscf.CASSCF(mf, 1, 2).run()
+        self.assertAlmostEqual(mc.e_tot, ehf, 9)
+
+        mc = mcscf.CASSCF(mf, 2, 0).run()
+        self.assertAlmostEqual(mc.e_tot, ehf, 9)
 
 if __name__ == '__main__':
     print("Full Tests for fft JK and ao2mo etc")

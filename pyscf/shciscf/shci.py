@@ -20,6 +20,8 @@
 '''
 SHCI solver for CASCI and CASSCF.
 '''
+
+from functools import reduce
 import ctypes
 import os
 import sys
@@ -149,7 +151,7 @@ class SHCI(pyscf.lib.StreamObject):
         self.integralFile = "FCIDUMP"
         self.configFile = "input.dat"
         self.outputFile = "output.dat"
-        if hasattr(settings, 'SHCIRUNTIMEDIR'):
+        if getattr(settings, 'SHCIRUNTIMEDIR', None):
             self.runtimeDir = settings.SHCIRUNTIMEDIR
         else:
             self.runtimeDir = '.'
