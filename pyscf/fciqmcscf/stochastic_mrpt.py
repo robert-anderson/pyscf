@@ -211,11 +211,11 @@ def read_rdms_fciqmc(ncas, nelecas, dirname='.'):
     return neci_dm1, neci_dm2, neci_dm3
 
 def full_nevpt2_intermediates_fciqmc(no_dm1, no_dm2, no_dm3, ncas, h2e, dirname='.'):
-    neci_nevpt2_intermediate = read_neci_pdm_mrpt('{}/spinfree_NEVPT2_AUX.1'.format(os.path.abspath(dirname)), ncas)
-    f3ac, f3ca = calc_lower_rank_part_of_intermediates(no_dm1, no_dm2, no_dm3, h2e)
-    f3ac+=neci_nevpt2_intermediate.transpose(2, 3, 4, 0, 1, 5)
-    f3ca+=neci_nevpt2_intermediate.transpose(0, 4, 3, 2, 5, 1)
-    return f3ac, f3ca
+	neci_nevpt2_intermediate = read_neci_pdm_mrpt('{}/spinfree_NEVPT2_AUX.1'.format(os.path.abspath(dirname)), ncas)
+	f3ac, f3ca = calc_lower_rank_part_of_intermediates(no_dm1, no_dm2, no_dm3, h2e)
+	f3ac+=neci_nevpt2_intermediate.transpose(2, 3, 4, 0, 1, 5)
+	f3ca+=neci_nevpt2_intermediate.transpose(0, 4, 3, 2, 5, 1)
+	return f3ac, f3ca
 
 '''
 import sys

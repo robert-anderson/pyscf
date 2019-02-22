@@ -863,14 +863,24 @@ class NEVPT(lib.StreamObject):
             aaaa = eris['ppaa'][self.ncore:nocc,self.ncore:nocc].copy()
 
             if self.fcisolver.__class__ == fciqmcscf.FCIQMCCI:
-                print 'Reading FCIQMC NEVPT2 intermediates...'
-                f3ac, f3ca = fciqmcscf.stochastic_mrpt.full_nevpt2_intermediates_fciqmc(dm1, dm2, dm3, self.ncas, aaaa.transpose(0,2,1,3), 
-                        dirname=self.fcisolver.dirname)
-                print 'FCIQMC NEVPT2 intermediates read successfully.'
-                # the dms are all normal ordered, so switch to product-of-single-excitation ordering
-                print 'Reordering FCIQMC RDMs from NORD to POSE...'
-                fciqmcscf.stochastic_mrpt.unreorder_dm123(dms['1'], dms['2'], dms['3'], inplace=True)
-                print 'complete'
+				try:
+					print 'Reading FCIQMC NEVPT2 intermediate...'
+					f3ac, f3ca = fciqmcscf.stochastic_mrpt.full_nevpt2_intermediates_fciqmc(dm1, dm2, dm3, self.ncas, aaaa.transpose(0,2,1,3), 
+							dirname=self.fcisolver.dirname)
+					print 'FCIQMC NEVPT2 intermediates read successfully.'
+				except IOError:
+					print 'FCIQMC NEVPT2 intermediate not found, reading 4RDM'
+					dm4 = fciqmcscf.stochastic_mrpt.read_neci_pdm_mrpt('spinfree_FourRDM.1', self.ncas)
+					print 'Computing low-rank part of FCIQMC NEVPT2 intermediate...'
+					f3ac, f3ca = fciqmcscf.stochastic_mrpt.calc_lower_rank_part_of_intermediates(dms['1'], dms['2'], dms['3'], aaaa.transpose(0,2,1,3))
+					print 'Adding rank-4 part of the NEVPT2 intermediate...'
+					f3ac += numpy.einsum('pqra,kibjqcpr->ijkabc', aaaa.transpose(0,2,1,3), dm4).transpose(2, 0, 4, 1, 3, 5)
+					f3ca += numpy.einsum('rcpq,kibjaqrp->ijkabc', aaaa.transpose(0,2,1,3), dm4).transpose(2, 0, 4, 1, 3, 5)
+					print 'complete'
+				# the dms are all normal ordered, so switch to product-of-single-excitation ordering
+				print 'Reordering FCIQMC RDMs from NORD to POSE...'
+				fciqmcscf.stochastic_mrpt.unreorder_dm123(dms['1'], dms['2'], dms['3'], inplace=True)
+				print 'complete'
 
             elif not hasattr(self.fcisolver, 'nevpt_intermediate'):
                 link_indexa = fci.cistring.gen_linkstr_index(range(self.ncas), self.nelecas[0])
