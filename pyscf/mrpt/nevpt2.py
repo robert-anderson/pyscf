@@ -28,6 +28,7 @@ import h5py
 from pyscf import lib
 from pyscf import fciqmcscf
 from pyscf.lib import logger
+from pyscf.lib.numpy_helper import einsum
 from pyscf import fci
 from pyscf.mcscf import mc_ao2mo
 from pyscf import ao2mo
@@ -42,43 +43,6 @@ NUMERICAL_ZERO = 1e-14
 # h1e is the CAS space effective 1e hamiltonian
 # h2e is the CAS space 2e integrals in  notation # a' -> p # b' -> q # c' -> r
 # d' -> s
-'''
-def get_lower_rank_pose_rdm_elem(no_rdm1, no_rdm2, no_rdm3, inds):
-    i,j,k,l,a,b,c,d = inds
-    e=0.0
-    #if not lower_rank_only:
-    #    e += rdm4[i,j,k,l,a,b,c,d]
-    if a==k:
-        e+=no_rdm3[i,j,l,c,b,d]
-    if b==l:
-        e+=no_rdm3[i,j,k,a,d,c]
-    if b==k:
-        e+=no_rdm3[i,j,l,a,c,d]
-    if a==l:
-        e+=no_rdm3[i,j,k,d,b,c]
-    if c==l:
-        e+=no_rdm3[i,j,k,a,b,d]
-    if a==j:
-        e+=no_rdm3[i,k,l,b,c,d]
-    if a==j and b==l:
-        e+=no_rdm2[i,k,d,c]
-    if b==k and a==l:
-        e+=no_rdm2[i,j,d,c]
-    if a==k and b==l:
-        e+=no_rdm2[i,j,c,d]
-    if a==j and c==l:
-        e+=no_rdm2[i,k,b,d]
-    if a==j and b==k:
-        e+=no_rdm2[i,l,c,d]
-    if b==k and c==l:
-        e+=no_rdm2[i,j,a,d]
-    if a==k and c==l:
-        e+=no_rdm2[i,j,d,b]
-    if a==j and b==k and c==l:
-        e+=no_rdm1[i,d]
-    return e
-'''
-
 def get_pose_rdm_elem_from_no_rdm_4(rdm1, rdm2, rdm3, rdm4, inds, lower_rank_only=False):
     i,j,k,l,a,b,c,d = inds
     e=0.0
@@ -114,11 +78,6 @@ def get_pose_rdm_elem_from_no_rdm_4(rdm1, rdm2, rdm3, rdm4, inds, lower_rank_onl
         e+=rdm1[i,d]
     return e
 
-
-
-
-
-
 def get_lower_rank_pose_rdm(no_rdm1, no_rdm2, no_rdm3, norb):
     pose_rdm = numpy.zeros((norb,)*8)
     for inds in itertools.product(range(norb), repeat=8):
@@ -147,29 +106,29 @@ def make_a16(h1e, h2e, dms, civec, norb, nelec, link_index=None):
         f3ac = _contract4pdm('NEVPTkern_aedf_ecdf', eri, civec, norb, nelec,
                              (link_indexa,link_indexb))
 
-    a16 = -numpy.einsum('ib,rpqiac->pqrabc', h1e, dm3)
-    a16 += numpy.einsum('ia,rpqbic->pqrabc', h1e, dm3)
-    a16 -= numpy.einsum('ci,rpqbai->pqrabc', h1e, dm3)
+    a16 = -einsum('ib,rpqiac->pqrabc', h1e, dm3)
+    a16 += einsum('ia,rpqbic->pqrabc', h1e, dm3)
+    a16 -= einsum('ci,rpqbai->pqrabc', h1e, dm3)
 
 # qjkiac = acqjki + delta(ja)qcki + delta(ia)qjkc - delta(qc)ajki - delta(kc)qjai
-    #:a16 -= numpy.einsum('kbij,rpqjkiac->pqrabc', h2e, dm4)
+    #:a16 -= einsum('kbij,rpqjkiac->pqrabc', h2e, dm4)
     a16 -= f3ca.transpose(1,4,0,2,5,3) # c'a'acb'b -> a'b'c'abc
-    a16 -= numpy.einsum('kbia,rpqcki->pqrabc', h2e, dm3)
-    a16 -= numpy.einsum('kbaj,rpqjkc->pqrabc', h2e, dm3)
-    a16 += numpy.einsum('cbij,rpqjai->pqrabc', h2e, dm3)
-    fdm2 = numpy.einsum('kbij,rpajki->prab'  , h2e, dm3)
+    a16 -= einsum('kbia,rpqcki->pqrabc', h2e, dm3)
+    a16 -= einsum('kbaj,rpqjkc->pqrabc', h2e, dm3)
+    a16 += einsum('cbij,rpqjai->pqrabc', h2e, dm3)
+    fdm2 = einsum('kbij,rpajki->prab'  , h2e, dm3)
     for i in range(norb):
         a16[:,i,:,:,:,i] += fdm2
 
-    #:a16 += numpy.einsum('ijka,rpqbjcik->pqrabc', h2e, dm4)
+    #:a16 += einsum('ijka,rpqbjcik->pqrabc', h2e, dm4)
     a16 += f3ac.transpose(1,2,0,4,3,5) # c'a'b'bac -> a'b'c'abc
 
-    #:a16 -= numpy.einsum('kcij,rpqbajki->pqrabc', h2e, dm4)
+    #:a16 -= einsum('kcij,rpqbajki->pqrabc', h2e, dm4)
     a16 -= f3ca.transpose(1,2,0,4,3,5) # c'a'b'bac -> a'b'c'abc
 
-    a16 += numpy.einsum('jbij,rpqiac->pqrabc', h2e, dm3)
-    a16 -= numpy.einsum('cjka,rpqbjk->pqrabc', h2e, dm3)
-    a16 += numpy.einsum('jcij,rpqbai->pqrabc', h2e, dm3)
+    a16 += einsum('jbij,rpqiac->pqrabc', h2e, dm3)
+    a16 -= einsum('cjka,rpqbjk->pqrabc', h2e, dm3)
+    a16 += einsum('jcij,rpqbai->pqrabc', h2e, dm3)
     return a16
 
 def make_a22(h1e, h2e, dms, civec, norb, nelec, link_index=None):
@@ -195,36 +154,36 @@ def make_a22(h1e, h2e, dms, civec, norb, nelec, link_index=None):
         f3ac = _contract4pdm('NEVPTkern_aedf_ecdf', eri, civec, norb, nelec,
                              (link_indexa,link_indexb))
 
-    a22 = -numpy.einsum('pb,kipjac->ijkabc', h1e, dm3)
-    a22 -= numpy.einsum('pa,kibjpc->ijkabc', h1e, dm3)
-    a22 += numpy.einsum('cp,kibjap->ijkabc', h1e, dm3)
-    a22 += numpy.einsum('cqra,kibjqr->ijkabc', h2e, dm3)
-    a22 -= numpy.einsum('qcpq,kibjap->ijkabc', h2e, dm3)
+    a22 = -einsum('pb,kipjac->ijkabc', h1e, dm3)
+    a22 -= einsum('pa,kibjpc->ijkabc', h1e, dm3)
+    a22 += einsum('cp,kibjap->ijkabc', h1e, dm3)
+    a22 += einsum('cqra,kibjqr->ijkabc', h2e, dm3)
+    a22 -= einsum('qcpq,kibjap->ijkabc', h2e, dm3)
 
 # qjprac = acqjpr + delta(ja)qcpr + delta(ra)qjpc - delta(qc)ajpr - delta(pc)qjar
-    #a22 -= numpy.einsum('pqrb,kiqjprac->ijkabc', h2e, dm4)
+    #a22 -= einsum('pqrb,kiqjprac->ijkabc', h2e, dm4)
     a22 -= f3ac.transpose(1,5,0,2,4,3) # c'a'acbb'
-    fdm2 = numpy.einsum('pqrb,kiqcpr->ikbc', h2e, dm3)
+    fdm2 = einsum('pqrb,kiqcpr->ikbc', h2e, dm3)
     for i in range(norb):
         a22[:,i,:,i,:,:] -= fdm2
-    a22 -= numpy.einsum('pqab,kiqjpc->ijkabc', h2e, dm3)
-    a22 += numpy.einsum('pcrb,kiajpr->ijkabc', h2e, dm3)
-    a22 += numpy.einsum('cqrb,kiqjar->ijkabc', h2e, dm3)
+    a22 -= einsum('pqab,kiqjpc->ijkabc', h2e, dm3)
+    a22 += einsum('pcrb,kiajpr->ijkabc', h2e, dm3)
+    a22 += einsum('cqrb,kiqjar->ijkabc', h2e, dm3)
 
-    #a22 -= numpy.einsum('pqra,kibjqcpr->ijkabc', h2e, dm4)
+    #a22 -= einsum('pqra,kibjqcpr->ijkabc', h2e, dm4)
     a22 -= f3ac.transpose(1,3,0,4,2,5) # c'a'bb'ac -> a'b'c'abc
 
-    #a22 += numpy.einsum('rcpq,kibjaqrp->ijkabc', h2e, dm4)
+    #a22 += einsum('rcpq,kibjaqrp->ijkabc', h2e, dm4)
     a22 += f3ca.transpose(1,3,0,4,2,5) # c'a'bb'ac -> a'b'c'abc
 
-    a22 += 2.0*numpy.einsum('jb,kiac->ijkabc', h1e, dm2)
-    a22 += 2.0*numpy.einsum('pjrb,kiprac->ijkabc', h2e, dm3)
-    fdm2  = numpy.einsum('pa,kipc->ikac', h1e, dm2)
-    fdm2 -= numpy.einsum('cp,kiap->ikac', h1e, dm2)
-    fdm2 -= numpy.einsum('cqra,kiqr->ikac', h2e, dm2)
-    fdm2 += numpy.einsum('qcpq,kiap->ikac', h2e, dm2)
-    fdm2 += numpy.einsum('pqra,kiqcpr->ikac', h2e, dm3)
-    fdm2 -= numpy.einsum('rcpq,kiaqrp->ikac', h2e, dm3)
+    a22 += 2.0*einsum('jb,kiac->ijkabc', h1e, dm2)
+    a22 += 2.0*einsum('pjrb,kiprac->ijkabc', h2e, dm3)
+    fdm2  = einsum('pa,kipc->ikac', h1e, dm2)
+    fdm2 -= einsum('cp,kiap->ikac', h1e, dm2)
+    fdm2 -= einsum('cqra,kiqr->ikac', h2e, dm2)
+    fdm2 += einsum('qcpq,kiap->ikac', h2e, dm2)
+    fdm2 += einsum('pqra,kiqcpr->ikac', h2e, dm3)
+    fdm2 -= einsum('rcpq,kiaqrp->ikac', h2e, dm3)
     for i in range(norb):
         a22[:,i,:,:,i,:] += fdm2 * 2
 
@@ -232,60 +191,60 @@ def make_a22(h1e, h2e, dms, civec, norb, nelec, link_index=None):
 
 
 def make_a17(h1e,h2e,dm2,dm3):
-    h1e = h1e - numpy.einsum('mjjn->mn',h2e)
+    h1e = h1e - einsum('mjjn->mn',h2e)
 
-    a17 = -numpy.einsum('pi,cabi->abcp',h1e,dm2)\
-          -numpy.einsum('kpij,cabjki->abcp',h2e,dm3)
+    a17 = -einsum('pi,cabi->abcp',h1e,dm2)\
+          -einsum('kpij,cabjki->abcp',h2e,dm3)
     return a17
 
 def make_a19(h1e,h2e,dm1,dm2):
-    h1e = h1e - numpy.einsum('mjjn->mn',h2e)
+    h1e = h1e - einsum('mjjn->mn',h2e)
 
-    a19 = -numpy.einsum('pi,ai->ap',h1e,dm1)\
-          -numpy.einsum('kpij,ajki->ap',h2e,dm2)
+    a19 = -einsum('pi,ai->ap',h1e,dm1)\
+          -einsum('kpij,ajki->ap',h2e,dm2)
     return a19
 
 def make_a23(h1e,h2e,dm1,dm2,dm3):
-    a23 = -numpy.einsum('ip,caib->abcp',h1e,dm2)\
-          -numpy.einsum('pijk,cajbik->abcp',h2e,dm3)\
-          +2.0*numpy.einsum('bp,ca->abcp',h1e,dm1)\
-          +2.0*numpy.einsum('pibk,caik->abcp',h2e,dm2)
+    a23 = -einsum('ip,caib->abcp',h1e,dm2)\
+          -einsum('pijk,cajbik->abcp',h2e,dm3)\
+          +2.0*einsum('bp,ca->abcp',h1e,dm1)\
+          +2.0*einsum('pibk,caik->abcp',h2e,dm2)
 
     return a23
 
 def make_a25(h1e,h2e,dm1,dm2):
 
-    a25 = -numpy.einsum('pi,ai->ap',h1e,dm1)\
-          -numpy.einsum('pijk,jaik->ap',h2e,dm2)\
-          +2.0*numpy.einsum('ap->pa',h1e)\
-          +2.0*numpy.einsum('piaj,ij->ap',h2e,dm1)
+    a25 = -einsum('pi,ai->ap',h1e,dm1)\
+          -einsum('pijk,jaik->ap',h2e,dm2)\
+          +2.0*einsum('ap->pa',h1e)\
+          +2.0*einsum('piaj,ij->ap',h2e,dm1)
 
     return a25
 
 def make_hdm3(dm1,dm2,dm3,hdm1,hdm2):
     delta = numpy.eye(dm3.shape[0])
-    hdm3 = - numpy.einsum('pb,qrac->pqrabc',delta,hdm2)\
-          - numpy.einsum('br,pqac->pqrabc',delta,hdm2)\
-          + numpy.einsum('bq,prac->pqrabc',delta,hdm2)*2.0\
-          + numpy.einsum('ap,bqcr->pqrabc',delta,dm2)*2.0\
-          - numpy.einsum('ap,cr,bq->pqrabc',delta,delta,dm1)*4.0\
-          + numpy.einsum('cr,bqap->pqrabc',delta,dm2)*2.0\
-          - numpy.einsum('bqapcr->pqrabc',dm3)\
-          + numpy.einsum('ar,pc,bq->pqrabc',delta,delta,dm1)*2.0\
-          - numpy.einsum('ar,bqcp->pqrabc',delta,dm2)
+    hdm3 = - einsum('pb,qrac->pqrabc',delta,hdm2)\
+          - einsum('br,pqac->pqrabc',delta,hdm2)\
+          + einsum('bq,prac->pqrabc',delta,hdm2)*2.0\
+          + einsum('ap,bqcr->pqrabc',delta,dm2)*2.0\
+          - einsum('ap,cr,bq->pqrabc',delta,delta,dm1)*4.0\
+          + einsum('cr,bqap->pqrabc',delta,dm2)*2.0\
+          - einsum('bqapcr->pqrabc',dm3)\
+          + einsum('ar,pc,bq->pqrabc',delta,delta,dm1)*2.0\
+          - einsum('ar,bqcp->pqrabc',delta,dm2)
     return hdm3
 
 
 def make_hdm2(dm1,dm2):
     delta = numpy.eye(dm2.shape[0])
-    dm2 = numpy.einsum('ikjl->ijkl',dm2) -numpy.einsum('jk,il->ijkl',delta,dm1)
-    hdm2 = numpy.einsum('klij->ijkl',dm2)\
-            + numpy.einsum('il,kj->ijkl',delta,dm1)\
-            + numpy.einsum('jk,li->ijkl',delta,dm1)\
-            - 2.0*numpy.einsum('ik,lj->ijkl',delta,dm1)\
-            - 2.0*numpy.einsum('jl,ki->ijkl',delta,dm1)\
-            - 2.0*numpy.einsum('il,jk->ijkl',delta,delta)\
-            + 4.0*numpy.einsum('ik,jl->ijkl',delta,delta)
+    dm2 = einsum('ikjl->ijkl',dm2) -einsum('jk,il->ijkl',delta,dm1)
+    hdm2 = einsum('klij->ijkl',dm2)\
+            + einsum('il,kj->ijkl',delta,dm1)\
+            + einsum('jk,li->ijkl',delta,dm1)\
+            - 2.0*einsum('ik,lj->ijkl',delta,dm1)\
+            - 2.0*einsum('jl,ki->ijkl',delta,dm1)\
+            - 2.0*einsum('il,jk->ijkl',delta,delta)\
+            + 4.0*einsum('ik,jl->ijkl',delta,delta)
 
     return hdm2
 
@@ -296,15 +255,15 @@ def make_hdm1(dm1):
 
 def make_a3(h1e,h2e,dm1,dm2,hdm1):
     delta = numpy.eye(dm2.shape[0])
-    a3 = numpy.einsum('ia,ip->pa',h1e,hdm1)\
-            + 2.0*numpy.einsum('ijka,pj,ik->pa',h2e,delta,dm1)\
-            - numpy.einsum('ijka,jpik->pa',h2e,dm2)
+    a3 = einsum('ia,ip->pa',h1e,hdm1)\
+            + 2.0*einsum('ijka,pj,ik->pa',h2e,delta,dm1)\
+            - einsum('ijka,jpik->pa',h2e,dm2)
     return a3
 
 def make_k27(h1e,h2e,dm1,dm2):
-    k27 = -numpy.einsum('ai,pi->pa',h1e,dm1)\
-         -numpy.einsum('iajk,pkij->pa',h2e,dm2)\
-         +numpy.einsum('iaji,pj->pa',h2e,dm1)
+    k27 = -einsum('ai,pi->pa',h1e,dm1)\
+         -einsum('iajk,pkij->pa',h2e,dm2)\
+         +einsum('iaji,pj->pa',h2e,dm1)
     return k27
 
 
@@ -313,56 +272,56 @@ def make_a7(h1e,h2e,dm1,dm2,dm3):
     #This dm2 and dm3 need to be in the form of norm order
     delta = numpy.eye(dm2.shape[0])
     # a^+_ia^+_ja_ka^l =  E^i_lE^j_k -\delta_{j,l} E^i_k
-    rm2 = numpy.einsum('iljk->ijkl',dm2) - numpy.einsum('ik,jl->ijkl',dm1,delta)
+    rm2 = einsum('iljk->ijkl',dm2) - einsum('ik,jl->ijkl',dm1,delta)
     # E^{i,j,k}_{l,m,n} = E^{i,j}_{m,n}E^k_l -\delta_{k,m}E^{i,j}_{l,n}- \delta_{k,n}E^{i,j}_{m,l}
     # = E^i_nE^j_mE^k_l -\delta_{j,n}E^i_mE^k_l -\delta_{k,m}E^{i,j}_{l,n} -\delta_{k,n}E^{i,j}_{m,l}
-    rm3 = numpy.einsum('injmkl->ijklmn',dm3)\
-        - numpy.einsum('jn,imkl->ijklmn',delta,dm2)\
-        - numpy.einsum('km,ijln->ijklmn',delta,rm2)\
-        - numpy.einsum('kn,ijml->ijklmn',delta,rm2)
+    rm3 = einsum('injmkl->ijklmn',dm3)\
+        - einsum('jn,imkl->ijklmn',delta,dm2)\
+        - einsum('km,ijln->ijklmn',delta,rm2)\
+        - einsum('kn,ijml->ijklmn',delta,rm2)
 
-    a7 = -numpy.einsum('bi,pqia->pqab',h1e,rm2)\
-         -numpy.einsum('ai,pqbi->pqab',h1e,rm2)\
-         -numpy.einsum('kbij,pqkija->pqab',h2e,rm3) \
-         -numpy.einsum('kaij,pqkibj->pqab',h2e,rm3) \
-         -numpy.einsum('baij,pqij->pqab',h2e,rm2)
+    a7 = -einsum('bi,pqia->pqab',h1e,rm2)\
+         -einsum('ai,pqbi->pqab',h1e,rm2)\
+         -einsum('kbij,pqkija->pqab',h2e,rm3) \
+         -einsum('kaij,pqkibj->pqab',h2e,rm3) \
+         -einsum('baij,pqij->pqab',h2e,rm2)
     return rm2, a7
 
 def make_a9(h1e,h2e,hdm1,hdm2,hdm3):
-    a9 =  numpy.einsum('ib,pqai->pqab',h1e,hdm2)
-    a9 += numpy.einsum('ijib,pqaj->pqab',h2e,hdm2)*2.0
-    a9 -= numpy.einsum('ijjb,pqai->pqab',h2e,hdm2)
-    a9 -= numpy.einsum('ijkb,pkqaij->pqab',h2e,hdm3)
-    a9 += numpy.einsum('ia,pqib->pqab',h1e,hdm2)
-    a9 -= numpy.einsum('ijja,pqib->pqab',h2e,hdm2)
-    a9 -= numpy.einsum('ijba,pqji->pqab',h2e,hdm2)
-    a9 += numpy.einsum('ijia,pqjb->pqab',h2e,hdm2)*2.0
-    a9 -= numpy.einsum('ijka,pqkjbi->pqab',h2e,hdm3)
+    a9 =  einsum('ib,pqai->pqab',h1e,hdm2)
+    a9 += einsum('ijib,pqaj->pqab',h2e,hdm2)*2.0
+    a9 -= einsum('ijjb,pqai->pqab',h2e,hdm2)
+    a9 -= einsum('ijkb,pkqaij->pqab',h2e,hdm3)
+    a9 += einsum('ia,pqib->pqab',h1e,hdm2)
+    a9 -= einsum('ijja,pqib->pqab',h2e,hdm2)
+    a9 -= einsum('ijba,pqji->pqab',h2e,hdm2)
+    a9 += einsum('ijia,pqjb->pqab',h2e,hdm2)*2.0
+    a9 -= einsum('ijka,pqkjbi->pqab',h2e,hdm3)
     return a9
 
 def make_a12(h1e,h2e,dm1,dm2,dm3):
-    a12 = numpy.einsum('ia,qpib->pqab',h1e,dm2)\
-        - numpy.einsum('bi,qpai->pqab',h1e,dm2)\
-        + numpy.einsum('ijka,qpjbik->pqab',h2e,dm3)\
-        - numpy.einsum('kbij,qpajki->pqab',h2e,dm3)\
-        - numpy.einsum('bjka,qpjk->pqab',h2e,dm2)\
-        + numpy.einsum('jbij,qpai->pqab',h2e,dm2)
+    a12 = einsum('ia,qpib->pqab',h1e,dm2)\
+        - einsum('bi,qpai->pqab',h1e,dm2)\
+        + einsum('ijka,qpjbik->pqab',h2e,dm3)\
+        - einsum('kbij,qpajki->pqab',h2e,dm3)\
+        - einsum('bjka,qpjk->pqab',h2e,dm2)\
+        + einsum('jbij,qpai->pqab',h2e,dm2)
     return a12
 
 def make_a13(h1e,h2e,dm1,dm2,dm3):
     delta = numpy.eye(dm3.shape[0])
-    a13 = -numpy.einsum('ia,qbip->pqab',h1e,dm2)
-    a13 += numpy.einsum('pa,qb->pqab',h1e,dm1)*2.0
-    a13 += numpy.einsum('bi,qiap->pqab',h1e,dm2)
-    a13 -= numpy.einsum('pa,bi,qi->pqab',delta,h1e,dm1)*2.0
-    a13 -= numpy.einsum('ijka,qbjpik->pqab',h2e,dm3)
-    a13 += numpy.einsum('kbij,qjapki->pqab',h2e,dm3)
-    a13 += numpy.einsum('blma,qmlp->pqab',h2e,dm2)
-    a13 += numpy.einsum('kpma,qbkm->pqab',h2e,dm2)*2.0
-    a13 -= numpy.einsum('bpma,qm->pqab',h2e,dm1)*2.0
-    a13 -= numpy.einsum('lbkl,qkap->pqab',h2e,dm2)
-    a13 -= numpy.einsum('ap,mbkl,qlmk->pqab',delta,h2e,dm2)*2.0
-    a13 += numpy.einsum('ap,lbkl,qk->pqab',delta,h2e,dm1)*2.0
+    a13 = -einsum('ia,qbip->pqab',h1e,dm2)
+    a13 += einsum('pa,qb->pqab',h1e,dm1)*2.0
+    a13 += einsum('bi,qiap->pqab',h1e,dm2)
+    a13 -= einsum('pa,bi,qi->pqab',delta,h1e,dm1)*2.0
+    a13 -= einsum('ijka,qbjpik->pqab',h2e,dm3)
+    a13 += einsum('kbij,qjapki->pqab',h2e,dm3)
+    a13 += einsum('blma,qmlp->pqab',h2e,dm2)
+    a13 += einsum('kpma,qbkm->pqab',h2e,dm2)*2.0
+    a13 -= einsum('bpma,qm->pqab',h2e,dm1)*2.0
+    a13 -= einsum('lbkl,qkap->pqab',h2e,dm2)
+    a13 -= einsum('ap,mbkl,qlmk->pqab',delta,h2e,dm2)*2.0
+    a13 += einsum('ap,lbkl,qk->pqab',delta,h2e,dm1)*2.0
     return a13
 
 
@@ -383,14 +342,14 @@ def Sr(mc,ci,dms, eris=None, verbose=None):
         core_dm = numpy.dot(mo_core,mo_core.T) *2
         core_vhf = mc.get_veff(mc.mol,core_dm)
         h1e_v = reduce(numpy.dot, (mo_virt.T, mc.get_hcore()+core_vhf , mo_cas))
-        h1e_v -= numpy.einsum('mbbn->mn',h2e_v)
+        h1e_v -= einsum('mbbn->mn',h2e_v)
     else:
         ncore = mc.ncore
         nocc = mc.ncore + mc.ncas
         h1e = eris['h1eff'][ncore:nocc,ncore:nocc]
         h2e = eris['ppaa'][ncore:nocc,ncore:nocc].transpose(0,2,1,3)
         h2e_v = eris['ppaa'][nocc:,ncore:nocc].transpose(0,2,1,3)
-        h1e_v = eris['h1eff'][nocc:,ncore:nocc] - numpy.einsum('mbbn->mn',h2e_v)
+        h1e_v = eris['h1eff'][nocc:,ncore:nocc] - einsum('mbbn->mn',h2e_v)
 
 
     if getattr(mc.fcisolver, 'nevpt_intermediate', None):
@@ -401,13 +360,13 @@ def Sr(mc,ci,dms, eris=None, verbose=None):
     a17 = make_a17(h1e,h2e,dm2,dm3)
     a19 = make_a19(h1e,h2e,dm1,dm2)
 
-    ener = numpy.einsum('ipqr,pqrabc,iabc->i',h2e_v,a16,h2e_v)\
-        +  numpy.einsum('ipqr,pqra,ia->i',h2e_v,a17,h1e_v)*2.0\
-        +  numpy.einsum('ip,pa,ia->i',h1e_v,a19,h1e_v)
+    ener = einsum('ipqr,pqrabc,iabc->i',h2e_v,a16,h2e_v)\
+        +  einsum('ipqr,pqra,ia->i',h2e_v,a17,h1e_v)*2.0\
+        +  einsum('ip,pa,ia->i',h1e_v,a19,h1e_v)
 
-    norm = numpy.einsum('ipqr,rpqbac,iabc->i',h2e_v,dm3,h2e_v)\
-        +  numpy.einsum('ipqr,rpqa,ia->i',h2e_v,dm2,h1e_v)*2.0\
-        +  numpy.einsum('ip,pa,ia->i',h1e_v,dm1,h1e_v)
+    norm = einsum('ipqr,rpqbac,iabc->i',h2e_v,dm3,h2e_v)\
+        +  einsum('ipqr,rpqa,ia->i',h2e_v,dm2,h1e_v)*2.0\
+        +  einsum('ip,pa,ia->i',h1e_v,dm1,h1e_v)
 
     return _norm_to_energy(norm, ener, mc.mo_energy[mc.ncore+mc.ncas:])
 
@@ -444,19 +403,19 @@ def Si(mc, ci, dms, eris=None, verbose=None):
     a23 = make_a23(h1e,h2e,dm1,dm2,dm3)
     a25 = make_a25(h1e,h2e,dm1,dm2)
     delta = numpy.eye(mc.ncas)
-    dm3_h = numpy.einsum('abef,cd->abcdef',dm2,delta)*2\
+    dm3_h = einsum('abef,cd->abcdef',dm2,delta)*2\
             - dm3.transpose(0,1,3,2,4,5)
-    dm2_h = numpy.einsum('ab,cd->abcd',dm1,delta)*2\
+    dm2_h = einsum('ab,cd->abcd',dm1,delta)*2\
             - dm2.transpose(0,1,3,2)
     dm1_h = 2*delta- dm1.transpose(1,0)
 
-    ener = numpy.einsum('qpir,pqrabc,baic->i',h2e_v,a22,h2e_v)\
-        +  numpy.einsum('qpir,pqra,ai->i',h2e_v,a23,h1e_v)*2.0\
-        +  numpy.einsum('pi,pa,ai->i',h1e_v,a25,h1e_v)
+    ener = einsum('qpir,pqrabc,baic->i',h2e_v,a22,h2e_v)\
+        +  einsum('qpir,pqra,ai->i',h2e_v,a23,h1e_v)*2.0\
+        +  einsum('pi,pa,ai->i',h1e_v,a25,h1e_v)
 
-    norm = numpy.einsum('qpir,rpqbac,baic->i',h2e_v,dm3_h,h2e_v)\
-        +  numpy.einsum('qpir,rpqa,ai->i',h2e_v,dm2_h,h1e_v)*2.0\
-        +  numpy.einsum('pi,pa,ai->i',h1e_v,dm1_h,h1e_v)
+    norm = einsum('qpir,rpqbac,baic->i',h2e_v,dm3_h,h2e_v)\
+        +  einsum('qpir,rpqa,ai->i',h2e_v,dm2_h,h1e_v)*2.0\
+        +  einsum('pi,pa,ai->i',h1e_v,dm1_h,h1e_v)
 
     return _norm_to_energy(norm, ener, -mc.mo_energy[:mc.ncore])
 
@@ -485,8 +444,8 @@ def Sijrs(mc, eris, verbose=None):
             t2i = (gi.ravel()/djba).reshape(ncore,nvirt,nvirt)
             # 2*ijab-ijba
             theta = gi*2 - gi.transpose(0,2,1)
-            norm += numpy.einsum('jab,jab', gi, theta)
-            e += numpy.einsum('jab,jab', t2i, theta)
+            norm += einsum('jab,jab', gi, theta)
+            e += einsum('jab,jab', t2i, theta)
     return norm, e
 
 def Sijr(mc, dms, eris, verbose=None):
@@ -512,10 +471,10 @@ def Sijr(mc, dms, eris, verbose=None):
         hdm1 = make_hdm1(dm1)
 
     a3 = make_a3(h1e,h2e,dm1,dm2,hdm1)
-    norm = 2.0*numpy.einsum('rpji,raji,pa->rji',h2e_v,h2e_v,hdm1)\
-         - 1.0*numpy.einsum('rpji,raij,pa->rji',h2e_v,h2e_v,hdm1)
-    h = 2.0*numpy.einsum('rpji,raji,pa->rji',h2e_v,h2e_v,a3)\
-         - 1.0*numpy.einsum('rpji,raij,pa->rji',h2e_v,h2e_v,a3)
+    norm = 2.0*einsum('rpji,raji,pa->rji',h2e_v,h2e_v,hdm1)\
+         - 1.0*einsum('rpji,raij,pa->rji',h2e_v,h2e_v,hdm1)
+    h = 2.0*einsum('rpji,raji,pa->rji',h2e_v,h2e_v,a3)\
+         - 1.0*einsum('rpji,raij,pa->rji',h2e_v,h2e_v,a3)
 
     diff = mc.mo_energy[mc.ncore+mc.ncas:,None,None] - mc.mo_energy[None,:mc.ncore,None] - mc.mo_energy[None,None,:mc.ncore]
 
@@ -540,10 +499,10 @@ def Srsi(mc, dms, eris, verbose=None):
         h2e_v = eris['pacv'][nocc:].transpose(3,0,2,1)
 
     k27 = make_k27(h1e,h2e,dm1,dm2)
-    norm = 2.0*numpy.einsum('rsip,rsia,pa->rsi',h2e_v,h2e_v,dm1)\
-         - 1.0*numpy.einsum('rsip,sria,pa->rsi',h2e_v,h2e_v,dm1)
-    h = 2.0*numpy.einsum('rsip,rsia,pa->rsi',h2e_v,h2e_v,k27)\
-         - 1.0*numpy.einsum('rsip,sria,pa->rsi',h2e_v,h2e_v,k27)
+    norm = 2.0*einsum('rsip,rsia,pa->rsi',h2e_v,h2e_v,dm1)\
+         - 1.0*einsum('rsip,sria,pa->rsi',h2e_v,h2e_v,dm1)
+    h = 2.0*einsum('rsip,rsia,pa->rsi',h2e_v,h2e_v,k27)\
+         - 1.0*einsum('rsip,sria,pa->rsi',h2e_v,h2e_v,k27)
     diff = mc.mo_energy[mc.ncore+mc.ncas:,None,None] + mc.mo_energy[None,mc.ncore+mc.ncas:,None] - mc.mo_energy[None,None,:mc.ncore]
     return _norm_to_energy(norm, h, diff)
 
@@ -570,8 +529,8 @@ def Srs(mc, dms, eris=None, verbose=None):
 
 # a7 is very sensitive to the accuracy of HF orbital and CI wfn
     rm2, a7 = make_a7(h1e,h2e,dm1,dm2,dm3)
-    norm = 0.5*numpy.einsum('rsqp,rsba,pqba->rs',h2e_v,h2e_v,rm2)
-    h = 0.5*numpy.einsum('rsqp,rsba,pqab->rs',h2e_v,h2e_v,a7)
+    norm = 0.5*einsum('rsqp,rsba,pqba->rs',h2e_v,h2e_v,rm2)
+    h = 0.5*einsum('rsqp,rsba,pqab->rs',h2e_v,h2e_v,a7)
     diff = mc.mo_energy[mc.ncore+mc.ncas:,None] + mc.mo_energy[None,mc.ncore+mc.ncas:]
     return _norm_to_energy(norm, h, diff)
 
@@ -611,8 +570,8 @@ def Sij(mc, dms, eris, verbose=None):
 
 # a9 is very sensitive to the accuracy of HF orbital and CI wfn
     a9 = make_a9(h1e,h2e,hdm1,hdm2,hdm3)
-    norm = 0.5*numpy.einsum('qpij,baij,pqab->ij',h2e_v,h2e_v,hdm2)
-    h = 0.5*numpy.einsum('qpij,baij,pqab->ij',h2e_v,h2e_v,a9)
+    norm = 0.5*einsum('qpij,baij,pqab->ij',h2e_v,h2e_v,hdm2)
+    h = 0.5*einsum('qpij,baij,pqab->ij',h2e_v,h2e_v,a9)
     diff = mc.mo_energy[:mc.ncore,None] + mc.mo_energy[None,:mc.ncore]
     return _norm_to_energy(norm, h, -diff)
 
@@ -641,23 +600,23 @@ def Sir(mc, dms, eris, verbose=None):
         h2e_v2 = eris['papa'][nocc:,:,:ncore].transpose(0,3,1,2)
         h1e_v = eris['h1eff'][nocc:,:ncore]
 
-    norm = numpy.einsum('rpiq,raib,qpab->ir',h2e_v1,h2e_v1,dm2)*2.0\
-         - numpy.einsum('rpiq,rabi,qpab->ir',h2e_v1,h2e_v2,dm2)\
-         - numpy.einsum('rpqi,raib,qpab->ir',h2e_v2,h2e_v1,dm2)\
-         + numpy.einsum('raqi,rabi,qb->ir',h2e_v2,h2e_v2,dm1)*2.0\
-         - numpy.einsum('rpqi,rabi,qbap->ir',h2e_v2,h2e_v2,dm2)\
-         + numpy.einsum('rpqi,raai,qp->ir',h2e_v2,h2e_v2,dm1)\
-         + numpy.einsum('rpiq,ri,qp->ir',h2e_v1,h1e_v,dm1)*4.0\
-         - numpy.einsum('rpqi,ri,qp->ir',h2e_v2,h1e_v,dm1)*2.0\
-         + numpy.einsum('ri,ri->ir',h1e_v,h1e_v)*2.0
+    norm = einsum('rpiq,raib,qpab->ir',h2e_v1,h2e_v1,dm2)*2.0\
+         - einsum('rpiq,rabi,qpab->ir',h2e_v1,h2e_v2,dm2)\
+         - einsum('rpqi,raib,qpab->ir',h2e_v2,h2e_v1,dm2)\
+         + einsum('raqi,rabi,qb->ir',h2e_v2,h2e_v2,dm1)*2.0\
+         - einsum('rpqi,rabi,qbap->ir',h2e_v2,h2e_v2,dm2)\
+         + einsum('rpqi,raai,qp->ir',h2e_v2,h2e_v2,dm1)\
+         + einsum('rpiq,ri,qp->ir',h2e_v1,h1e_v,dm1)*4.0\
+         - einsum('rpqi,ri,qp->ir',h2e_v2,h1e_v,dm1)*2.0\
+         + einsum('ri,ri->ir',h1e_v,h1e_v)*2.0
 
     a12 = make_a12(h1e,h2e,dm1,dm2,dm3)
     a13 = make_a13(h1e,h2e,dm1,dm2,dm3)
 
-    h = numpy.einsum('rpiq,raib,pqab->ir',h2e_v1,h2e_v1,a12)*2.0\
-         - numpy.einsum('rpiq,rabi,pqab->ir',h2e_v1,h2e_v2,a12)\
-         - numpy.einsum('rpqi,raib,pqab->ir',h2e_v2,h2e_v1,a12)\
-         + numpy.einsum('rpqi,rabi,pqab->ir',h2e_v2,h2e_v2,a13)
+    h = einsum('rpiq,raib,pqab->ir',h2e_v1,h2e_v1,a12)*2.0\
+         - einsum('rpiq,rabi,pqab->ir',h2e_v1,h2e_v2,a12)\
+         - einsum('rpqi,raib,pqab->ir',h2e_v2,h2e_v1,a12)\
+         + einsum('rpqi,rabi,pqab->ir',h2e_v2,h2e_v2,a13)
     diff = mc.mo_energy[:mc.ncore,None] - mc.mo_energy[None,mc.ncore+mc.ncas:]
     return _norm_to_energy(norm, h, -diff)
 
@@ -816,8 +775,8 @@ class NEVPT(lib.StreamObject):
                 h2e = eris['ppaa'][self.ncore:nocc,self.ncore:nocc].transpose(0,2,1,3)
 
                 lower_rank_dm4 = get_lower_rank_pose_rdm(dm1, dm2, dm3, self.ncas)
-                f3ac += numpy.einsum('ijka,rpqbjcik->pqrabc', h2e, lower_rank_dm4).transpose(2,0,1,4,3,5)
-                f3ca += numpy.einsum('kcij,rpqbajki->pqrabc', h2e, lower_rank_dm4).transpose(2,0,1,4,3,5)
+                f3ac += einsum('ijka,rpqbjcik->pqrabc', h2e, lower_rank_dm4).transpose(2,0,1,4,3,5)
+                f3ca += einsum('kcij,rpqbajki->pqrabc', h2e, lower_rank_dm4).transpose(2,0,1,4,3,5)
                 fci.rdm.unreorder_dm123(dm1, dm2, dm3)
             else:
                 dm4 = self.fcisolver.read_neci_four_pdm('spinfree_FourRDM.1', self.ncas)
@@ -874,8 +833,8 @@ class NEVPT(lib.StreamObject):
 					print 'Computing low-rank part of FCIQMC NEVPT2 intermediate...'
 					f3ac, f3ca = fciqmcscf.stochastic_mrpt.calc_lower_rank_part_of_intermediates(dms['1'], dms['2'], dms['3'], aaaa.transpose(0,2,1,3))
 					print 'Adding rank-4 part of the NEVPT2 intermediate...'
-					f3ac += numpy.einsum('pqra,kibjqcpr->ijkabc', aaaa.transpose(0,2,1,3), dm4).transpose(2, 0, 4, 1, 3, 5)
-					f3ca += numpy.einsum('rcpq,kibjaqrp->ijkabc', aaaa.transpose(0,2,1,3), dm4).transpose(2, 0, 4, 1, 3, 5)
+					f3ac += einsum('pqra,kibjqcpr->ijkabc', aaaa.transpose(0,2,1,3), dm4).transpose(2, 0, 4, 1, 3, 5)
+					f3ca += einsum('rcpq,kibjaqrp->ijkabc', aaaa.transpose(0,2,1,3), dm4).transpose(2, 0, 4, 1, 3, 5)
 					print 'complete'
 				# the dms are all normal ordered, so switch to product-of-single-excitation ordering
 				print 'Reordering FCIQMC RDMs from NORD to POSE...'
