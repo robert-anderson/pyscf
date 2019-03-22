@@ -29,6 +29,12 @@ from pyscf import lib
 from pyscf import fciqmcscf
 from pyscf.lib import logger
 from pyscf.lib.numpy_helper import einsum
+if hasattr(numpy, 'einsum_path'):
+    #einsum_path must be provided by numpy for parallel contractions to work. numpy >= v1.12.0rc1 required
+    from pyscf.lib.numpy_helper import einsum
+else:
+    from numpy import einsum
+
 from pyscf import fci
 from pyscf.mcscf import mc_ao2mo
 from pyscf import ao2mo
