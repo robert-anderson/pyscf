@@ -25,6 +25,7 @@ import itertools
 from functools import reduce
 import numpy
 import h5py
+import pickle
 from pyscf import lib
 from pyscf import fciqmcscf
 from pyscf.lib import logger
@@ -89,6 +90,10 @@ def get_lower_rank_pose_rdm(no_rdm1, no_rdm2, no_rdm3, norb):
     for inds in itertools.product(range(norb), repeat=8):
         pose_rdm[inds] = get_pose_rdm_elem_from_no_rdm_4(no_rdm1, no_rdm2, no_rdm3, None, inds, True)
     return pose_rdm
+
+def save_contractions(name, norm, h, diff):
+    with open('{}.pkl'.format(name), 'wb') as f:
+        pickle.dump({'norm':norm, 'h':h, 'diff':diff}, f)
 
 def make_a16(h1e, h2e, dms, civec, norb, nelec, link_index=None):
     dm3 = dms['3']
@@ -374,7 +379,7 @@ def Sr(mc,ci,dms, eris=None, verbose=None):
         +  einsum('ipqr,rpqa,ia->i',h2e_v,dm2,h1e_v)*2.0\
         +  einsum('ip,pa,ia->i',h1e_v,dm1,h1e_v)
 
-    return _norm_to_energy(norm, ener, mc.mo_energy[mc.ncore+mc.ncas:])
+    return _norm_to_energy(norm, ener, mc.mo_energy[mc.ncore+mc.ncas:], name='Sr')
 
 def Si(mc, ci, dms, eris=None, verbose=None):
     print '\tSi subspace...'
@@ -423,7 +428,7 @@ def Si(mc, ci, dms, eris=None, verbose=None):
         +  einsum('qpir,rpqa,ai->i',h2e_v,dm2_h,h1e_v)*2.0\
         +  einsum('pi,pa,ai->i',h1e_v,dm1_h,h1e_v)
 
-    return _norm_to_energy(norm, ener, -mc.mo_energy[:mc.ncore])
+    return _norm_to_energy(norm, ener, -mc.mo_energy[:mc.ncore], name='Si')
 
 
 def Sijrs(mc, eris, verbose=None):
@@ -484,7 +489,7 @@ def Sijr(mc, dms, eris, verbose=None):
 
     diff = mc.mo_energy[mc.ncore+mc.ncas:,None,None] - mc.mo_energy[None,:mc.ncore,None] - mc.mo_energy[None,None,:mc.ncore]
 
-    return _norm_to_energy(norm, h, diff)
+    return _norm_to_energy(norm, h, diff, name='Sijr')
 
 def Srsi(mc, dms, eris, verbose=None):
     #Subspace S_ijr^{(1)}
@@ -510,7 +515,7 @@ def Srsi(mc, dms, eris, verbose=None):
     h = 2.0*einsum('rsip,rsia,pa->rsi',h2e_v,h2e_v,k27)\
          - 1.0*einsum('rsip,sria,pa->rsi',h2e_v,h2e_v,k27)
     diff = mc.mo_energy[mc.ncore+mc.ncas:,None,None] + mc.mo_energy[None,mc.ncore+mc.ncas:,None] - mc.mo_energy[None,None,:mc.ncore]
-    return _norm_to_energy(norm, h, diff)
+    return _norm_to_energy(norm, h, diff, name='Srsi')
 
 def Srs(mc, dms, eris=None, verbose=None):
     print '\tSrs subspace...'
@@ -538,7 +543,7 @@ def Srs(mc, dms, eris=None, verbose=None):
     norm = 0.5*einsum('rsqp,rsba,pqba->rs',h2e_v,h2e_v,rm2)
     h = 0.5*einsum('rsqp,rsba,pqab->rs',h2e_v,h2e_v,a7)
     diff = mc.mo_energy[mc.ncore+mc.ncas:,None] + mc.mo_energy[None,mc.ncore+mc.ncas:]
-    return _norm_to_energy(norm, h, diff)
+    return _norm_to_energy(norm, h, diff, name='Srs')
 
 def Sij(mc, dms, eris, verbose=None):
     print '\tSij subspace...'
@@ -579,7 +584,7 @@ def Sij(mc, dms, eris, verbose=None):
     norm = 0.5*einsum('qpij,baij,pqab->ij',h2e_v,h2e_v,hdm2)
     h = 0.5*einsum('qpij,baij,pqab->ij',h2e_v,h2e_v,a9)
     diff = mc.mo_energy[:mc.ncore,None] + mc.mo_energy[None,:mc.ncore]
-    return _norm_to_energy(norm, h, -diff)
+    return _norm_to_energy(norm, h, -diff, name='Sij')
 
 
 def Sir(mc, dms, eris, verbose=None):
@@ -624,7 +629,7 @@ def Sir(mc, dms, eris, verbose=None):
          - einsum('rpqi,raib,pqab->ir',h2e_v2,h2e_v1,a12)\
          + einsum('rpqi,rabi,pqab->ir',h2e_v2,h2e_v2,a13)
     diff = mc.mo_energy[:mc.ncore,None] - mc.mo_energy[None,mc.ncore+mc.ncas:]
-    return _norm_to_energy(norm, h, -diff)
+    return _norm_to_energy(norm, h, -diff, name='Sir')
 
 
 class NEVPT(lib.StreamObject):
@@ -720,7 +725,7 @@ class NEVPT(lib.StreamObject):
         self.compressed_mps = True
         return self
 
-    def kernel(self):
+    def kernel(self, save_dms=False):
         from pyscf.mcscf.addons import StateAverageFCISolver
         if isinstance(self.fcisolver, StateAverageFCISolver):
             raise RuntimeError('State-average FCI solver object cannot be used '
@@ -804,18 +809,8 @@ class NEVPT(lib.StreamObject):
               }
         time1 = log.timer('3pdm, 4pdm', *time0)
 
-        '''
-        if self.fcisolver.__class__ == fciqmcscf.FCIQMCCI:
-            import pickle
-            with open('casci.pkl', 'rb') as f:
-                eris = pickle.load(f)['eris']
-        else:
-            eris = _ERIS(self, self.mo_coeff)
-        '''
         print 'Starting integral transformation...'
         eris = _ERIS(self, self.mo_coeff)
-        #import pickle
-        #with open('casci.pkl', 'rb') as f: eris = pickle.load(f)['eris']
 
         print 'Integral transformation completed successfully...'
 
@@ -858,6 +853,9 @@ class NEVPT(lib.StreamObject):
             dms['f3ca'] = f3ca
             dms['f3ac'] = f3ac
 
+        if save_dms:
+            with open('dms.pkl', 'wb') as f: pickle.dump(dms, f)
+
         time1 = log.timer('eri-4pdm contraction', *time1)
 
         print 'Starting tensor contraction...'
@@ -891,41 +889,49 @@ class NEVPT(lib.StreamObject):
             print '\t{}/{}'.format(isubspace, nsubspace)
             norm_Sr   , e_Sr    = Sr(self, self.load_ci(), dms, eris)
             logger.note(self, "Sr    (-1)',   E = %.14f",  e_Sr  )
+            logger.note(self, "Sr    (-1)',   N = %.14f",  norm_Sr  )
             time1 = log.timer("space Sr (-1)'", *time1)
             isubspace+=1
             print '\t{}/{}'.format(isubspace, nsubspace)
             norm_Si   , e_Si    = Si(self, self.load_ci(), dms, eris)
             logger.note(self, "Si    (+1)',   E = %.14f",  e_Si  )
+            logger.note(self, "Si    (+1)',   N = %.14f",  norm_Si  )
             time1 = log.timer("space Si (+1)'", *time1)
         isubspace+=1
         print '\t{}/{}'.format(isubspace, nsubspace)
         norm_Sijrs, e_Sijrs = Sijrs(self, eris)
         logger.note(self, "Sijrs (0)  ,   E = %.14f", e_Sijrs)
+        logger.note(self, "Sijrs (0)  ,   N = %.14f", norm_Sijrs)
         time1 = log.timer('space Sijrs (0)', *time1)
         isubspace+=1
         print '\t{}/{}'.format(isubspace, nsubspace)
         norm_Sijr , e_Sijr  = Sijr(self, dms, eris)
         logger.note(self, "Sijr  (+1) ,   E = %.14f",  e_Sijr)
+        logger.note(self, "Sijr  (+1) ,   N = %.14f",  norm_Sijr)
         time1 = log.timer('space Sijr (+1)', *time1)
         isubspace+=1
         print '\t{}/{}'.format(isubspace, nsubspace)
         norm_Srsi , e_Srsi  = Srsi(self, dms, eris)
         logger.note(self, "Srsi  (-1) ,   E = %.14f",  e_Srsi)
+        logger.note(self, "Srsi  (-1) ,   N = %.14f",  norm_Srsi)
         isubspace+=1
         print '\t{}/{}'.format(isubspace, nsubspace)
         time1 = log.timer('space Srsi (-1)', *time1)
         norm_Srs  , e_Srs   = Srs(self, dms, eris)
         logger.note(self, "Srs   (-2) ,   E = %.14f",  e_Srs )
+        logger.note(self, "Srs   (-2) ,   N = %.14f",  norm_Srs )
         time1 = log.timer('space Srs (-2)', *time1)
         isubspace+=1
         print '\t{}/{}'.format(isubspace, nsubspace)
         norm_Sij  , e_Sij   = Sij(self, dms, eris)
         logger.note(self, "Sij   (+2) ,   E = %.14f",  e_Sij )
+        logger.note(self, "Sij   (+2) ,   N = %.14f",  norm_Sij )
         time1 = log.timer('space Sij (+2)', *time1)
         isubspace+=1
         print '\t{}/{}'.format(isubspace, nsubspace)
         norm_Sir  , e_Sir   = Sir(self, dms, eris)
         logger.note(self, "Sir   (0)' ,   E = %.14f",  e_Sir )
+        logger.note(self, "Sir   (0)' ,   N = %.14f",  norm_Sir )
         time1 = log.timer("space Sir (0)'", *time1)
 
         nevpt_e  = e_Sr + e_Si + e_Sijrs + e_Sijr + e_Srsi + e_Srs + e_Sij + e_Sir
@@ -1002,12 +1008,36 @@ def _extract_orbs(mc, mo_coeff):
     mo_vir = mo_coeff[:,nocc:]
     return mo_core, mo_cas, mo_vir
 
-
-def _norm_to_energy(norm, h, diff):
-    idx = abs(norm) > NUMERICAL_ZERO
-    ener_t = -(norm[idx] / (diff[idx] + h[idx]/norm[idx])).sum()
+def _norm_to_energy(norm, h, diff, name=None, thresh=NUMERICAL_ZERO):
+    if name is not None:
+        save_contractions(name, norm, h, diff)
+    idx = abs(norm) > thresh
+    norm = norm[idx]
+    diff = diff[idx]
+    h = h[idx]
+    ener_t = -(norm / (diff + h/norm)).sum()
     norm_t = norm.sum()
     return norm_t, ener_t
+
+def dE_dnorm(norm, h, diff):
+    idx = abs(norm) > thresh
+    norm = norm[idx]
+    diff = diff[idx]
+    h = h[idx]
+    return -1.0/(h/norm + diff) - (h/norm)*(h/norm + diff)**-2
+
+def dE_dh(norm, h, diff):
+    idx = abs(norm) > thresh
+    norm = norm[idx]
+    diff = diff[idx]
+    h = h[idx]
+    return (h/norm + diff)**-2
+
+def delta_E(norm, delta_norm, h, delta_h, diff):
+    return ((dE_dN(norm, h, diff)*delta_norm)**2 + (dE_dh(norm, h, diff)*delta_h)**2).sum()**0.5
+
+def mean_energy(norm, h, diff):
+    return -(norm / (diff + h/norm))
 
 def _ERIS(mc, mo, method='incore'):
     nmo = mo.shape[1]
