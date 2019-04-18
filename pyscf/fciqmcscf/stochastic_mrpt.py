@@ -251,7 +251,3 @@ print numpy.allclose(dm2/2, two_from_three_pdm(dm3, sum(mycas.nelecas)))
 
 
 
-
-
-
-
