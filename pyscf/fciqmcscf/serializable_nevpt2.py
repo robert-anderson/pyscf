@@ -6,6 +6,15 @@ import shutil
 from pyscf import mcscf, gto, scf, mrpt, ao2mo, fciqmcscf
 einsum = mrpt.nevpt2.einsum
 
+def output_fcidump(casci, mol, dirname=None):
+    tmp = casci.fcisolver
+    casci.fcisolver = fciqmcscf.FCIQMCCI(mol)
+    casci.fcisolver.only_ints = 1
+    try: casci.kernel()
+    except TypeError: pass
+    if dirname is not None: shutil.move('FCIDUMP', '{}/FCIDUMP'.format(dirname))
+    casci.fcisolver = tmp
+
 class SerializableNevpt2:
     mol_kwargs = None
     hf_canon_mo = None
@@ -25,8 +34,10 @@ class SerializableNevpt2:
             self.norb, self.nelecas = norb, nelecas
             if fciqmc_dir is not None:
                 print '### Initial invokation for subsequent FCIQMC RDM sampling'
+                output_fcidump(casci, mol, fciqmc_dir)
             else:
                 print '### Exact CASCI+NEVPT2 invokation'
+                output_fcidump(casci, mol)
                 casci.kernel()
                 self.casci_canon_mo = casci.mo_coeff
                 self.casci_mo_energy = casci.mo_energy
