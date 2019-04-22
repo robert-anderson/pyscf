@@ -21,7 +21,7 @@ class SerializableNevpt2:
     hf_mo_energy = None
     casci_canon_mo = None
     casci_mo_energy = None
-    def __init__(self, fciqmc_dir=None, mol_kwargs=None, fname=None, norb=None, nelecas=None):
+    def __init__(self, fciqmc_dir=None, mol_kwargs=None, fname='nevpt2_store.pkl', norb=None, nelecas=None):
         if isinstance(mol_kwargs, dict):
             self.mol_kwargs = mol_kwargs
             mol = self.mol()
@@ -52,9 +52,6 @@ class SerializableNevpt2:
             casci = mcscf.CASCI(hf, self.norb, self.nelecas)
             casci.mo_coeff = self.casci_canon_mo if self.casci_canon_mo is not None else self.hf_canon_mo
             casci.mo_energy = self.casci_mo_energy if self.casci_canon_mo is not None else self.hf_mo_energy
-
-            with open('/scratch/scratch/mmm0043/work/nevpt2/production/N2/1.0977A/6o6e/casci.pkl', 'rb') as f:
-                tmp = pickle.load(f)
 
             if fciqmc_dir is not None:
                 print '### Stochastic NEVPT2 invokation with FCIQMC RDMs'
