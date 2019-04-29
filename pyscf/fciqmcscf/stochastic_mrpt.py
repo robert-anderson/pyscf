@@ -208,7 +208,7 @@ def read_rdms_fciqmc(ncas, nelecas, dirname='.'):
     if nelecas.__class__==tuple:
         neci_dm1 = one_from_two_pdm(neci_dm2, sum(nelecas))
     else:
-        neci_dm1 = one_from_two_pdm(neci_dm2, nelec)
+        neci_dm1 = one_from_two_pdm(neci_dm2, nelecas)
     neci_dm3 = read_neci_pdm_mrpt('{}/spinfree_ThreeRDM.1'.format(os.path.abspath(dirname)), ncas)
     return neci_dm1, neci_dm2, neci_dm3
 
