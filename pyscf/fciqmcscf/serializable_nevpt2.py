@@ -21,7 +21,7 @@ class SerializableNevpt2:
     hf_mo_energy = None
     casci_canon_mo = None
     casci_mo_energy = None
-    def __init__(self, fciqmc_dir=None, mol_kwargs=None, fname='nevpt2_store.pkl', norb=None, nelecas=None):
+    def __init__(self, fciqmc_dir=None, mol_kwargs=None, fname='nevpt2_store.pkl', norb=None, nelecas=None, threshs=(1e-14,)):
         if isinstance(mol_kwargs, dict):
             self.mol_kwargs = mol_kwargs
             mol = self.mol()
@@ -42,6 +42,7 @@ class SerializableNevpt2:
                 self.casci_canon_mo = casci.mo_coeff
                 self.casci_mo_energy = casci.mo_energy
                 nevpt2 = mrpt.NEVPT(casci)
+                nevpt2.threshs = threshs
                 nevpt2.kernel()
         elif isinstance(fname, str) and os.path.exists(fname):
             self.load(fname)
@@ -60,6 +61,7 @@ class SerializableNevpt2:
             else:
                 print '### Exact NEVPT2 invokation from previous CASCI'
             nevpt2 = mrpt.NEVPT(casci)
+            nevpt2.threshs = threshs
             nevpt2.canonicalized = self.casci_canon_mo is not None
             nevpt2.kernel()
         else:

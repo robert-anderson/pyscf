@@ -296,7 +296,7 @@ def make_a13(h1e,h2e,dm1,dm2,dm3):
     return a13
 
 
-def Sr(mc,ci,dms, eris=None, verbose=None):
+def Sr(mc,ci,dms, eris=None, verbose=None, threshs=(NUMERICAL_ZERO,)):
     print '\tSr subspace...'
     #The subspace S_r^{(-1)}
     mo_core, mo_cas, mo_virt = _extract_orbs(mc, mc.mo_coeff)
@@ -331,7 +331,7 @@ def Sr(mc,ci,dms, eris=None, verbose=None):
     a17 = make_a17(h1e,h2e,dm2,dm3)
     a19 = make_a19(h1e,h2e,dm1,dm2)
 
-    ener = einsum('ipqr,pqrabc,iabc->i',h2e_v,a16,h2e_v)\
+    h = einsum('ipqr,pqrabc,iabc->i',h2e_v,a16,h2e_v)\
         +  einsum('ipqr,pqra,ia->i',h2e_v,a17,h1e_v)*2.0\
         +  einsum('ip,pa,ia->i',h1e_v,a19,h1e_v)
 
@@ -339,9 +339,11 @@ def Sr(mc,ci,dms, eris=None, verbose=None):
         +  einsum('ipqr,rpqa,ia->i',h2e_v,dm2,h1e_v)*2.0\
         +  einsum('ip,pa,ia->i',h1e_v,dm1,h1e_v)
 
-    return _norm_to_energy(norm, ener, mc.mo_energy[mc.ncore+mc.ncas:], name='Sr')
+    #return _norm_to_energy(norm, ener, mc.mo_energy[mc.ncore+mc.ncas:], name='Sr')
+    diff = mc.mo_energy[mc.ncore+mc.ncas:]
+    return norm_to_energy_multi_thresh(norm, h, diff, threshs=threshs)
 
-def Si(mc, ci, dms, eris=None, verbose=None):
+def Si(mc, ci, dms, eris=None, verbose=None, threshs=(NUMERICAL_ZERO,)):
     print '\tSi subspace...'
     #Subspace S_i^{(1)}
     mo_core, mo_cas, mo_virt = _extract_orbs(mc, mc.mo_coeff)
@@ -380,7 +382,7 @@ def Si(mc, ci, dms, eris=None, verbose=None):
             - dm2.transpose(0,1,3,2)
     dm1_h = 2*delta- dm1.transpose(1,0)
 
-    ener = einsum('qpir,pqrabc,baic->i',h2e_v,a22,h2e_v)\
+    h = einsum('qpir,pqrabc,baic->i',h2e_v,a22,h2e_v)\
         +  einsum('qpir,pqra,ai->i',h2e_v,a23,h1e_v)*2.0\
         +  einsum('pi,pa,ai->i',h1e_v,a25,h1e_v)
 
@@ -388,7 +390,9 @@ def Si(mc, ci, dms, eris=None, verbose=None):
         +  einsum('qpir,rpqa,ai->i',h2e_v,dm2_h,h1e_v)*2.0\
         +  einsum('pi,pa,ai->i',h1e_v,dm1_h,h1e_v)
 
-    return _norm_to_energy(norm, ener, -mc.mo_energy[:mc.ncore], name='Si')
+    #return _norm_to_energy(norm, ener, -mc.mo_energy[:mc.ncore], name='Si')
+    diff = -mc.mo_energy[:mc.ncore]
+    return norm_to_energy_multi_thresh(norm, h, diff, name='Si', threshs=threshs)
 
 
 def Sijrs(mc, eris, verbose=None):
@@ -419,7 +423,7 @@ def Sijrs(mc, eris, verbose=None):
             e += einsum('jab,jab', t2i, theta)
     return norm, e
 
-def Sijr(mc, dms, eris, verbose=None):
+def Sijr(mc, dms, eris, verbose=None, threshs=(NUMERICAL_ZERO,)):
     print '\tSijr subspace...'
     #Subspace S_ijr^{(1)}
     mo_core, mo_cas, mo_virt = _extract_orbs(mc, mc.mo_coeff)
@@ -449,9 +453,10 @@ def Sijr(mc, dms, eris, verbose=None):
 
     diff = mc.mo_energy[mc.ncore+mc.ncas:,None,None] - mc.mo_energy[None,:mc.ncore,None] - mc.mo_energy[None,None,:mc.ncore]
 
-    return _norm_to_energy(norm, h, diff, name='Sijr')
+    #return _norm_to_energy(norm, h, diff, name='Sijr')
+    return norm_to_energy_multi_thresh(norm, h, diff, name='Sijr', threshs=threshs)
 
-def Srsi(mc, dms, eris, verbose=None):
+def Srsi(mc, dms, eris, verbose=None, threshs=(NUMERICAL_ZERO,)):
     #Subspace S_ijr^{(1)}
     print '\tSrsi subspace...'
     mo_core, mo_cas, mo_virt = _extract_orbs(mc, mc.mo_coeff)
@@ -475,9 +480,10 @@ def Srsi(mc, dms, eris, verbose=None):
     h = 2.0*einsum('rsip,rsia,pa->rsi',h2e_v,h2e_v,k27)\
          - 1.0*einsum('rsip,sria,pa->rsi',h2e_v,h2e_v,k27)
     diff = mc.mo_energy[mc.ncore+mc.ncas:,None,None] + mc.mo_energy[None,mc.ncore+mc.ncas:,None] - mc.mo_energy[None,None,:mc.ncore]
-    return _norm_to_energy(norm, h, diff, name='Srsi')
+    #return _norm_to_energy(norm, h, diff, name='Srsi')
+    return norm_to_energy_multi_thresh(norm, h, diff, name='Srsi', threshs=threshs)
 
-def Srs(mc, dms, eris=None, verbose=None):
+def Srs(mc, dms, eris=None, verbose=None, threshs=(NUMERICAL_ZERO,)):
     print '\tSrs subspace...'
     #Subspace S_rs^{(-2)}
     mo_core, mo_cas, mo_virt = _extract_orbs(mc, mc.mo_coeff)
@@ -503,9 +509,9 @@ def Srs(mc, dms, eris=None, verbose=None):
     norm = 0.5*einsum('rsqp,rsba,pqba->rs',h2e_v,h2e_v,rm2)
     h = 0.5*einsum('rsqp,rsba,pqab->rs',h2e_v,h2e_v,a7)
     diff = mc.mo_energy[mc.ncore+mc.ncas:,None] + mc.mo_energy[None,mc.ncore+mc.ncas:]
-    return _norm_to_energy(norm, h, diff, name='Srs')
+    return norm_to_energy_multi_thresh(norm, h, diff, name='Srs', threshs=threshs)
 
-def Sij(mc, dms, eris, verbose=None):
+def Sij(mc, dms, eris, verbose=None, threshs=(NUMERICAL_ZERO,)):
     print '\tSij subspace...'
     #Subspace S_ij^{(-2)}
     mo_core, mo_cas, mo_virt = _extract_orbs(mc, mc.mo_coeff)
@@ -544,10 +550,11 @@ def Sij(mc, dms, eris, verbose=None):
     norm = 0.5*einsum('qpij,baij,pqab->ij',h2e_v,h2e_v,hdm2)
     h = 0.5*einsum('qpij,baij,pqab->ij',h2e_v,h2e_v,a9)
     diff = mc.mo_energy[:mc.ncore,None] + mc.mo_energy[None,:mc.ncore]
-    return _norm_to_energy(norm, h, -diff, name='Sij')
+    #return _norm_to_energy(norm, h, -diff, name='Sij')
+    return norm_to_energy_multi_thresh(norm, h, -diff, name='Sij', threshs=threshs)
 
 
-def Sir(mc, dms, eris, verbose=None):
+def Sir(mc, dms, eris, verbose=None, threshs=(NUMERICAL_ZERO,)):
     print '\tSir subspace...'
     #Subspace S_il^{(0)}
     mo_core, mo_cas, mo_virt = _extract_orbs(mc, mc.mo_coeff)
@@ -589,7 +596,8 @@ def Sir(mc, dms, eris, verbose=None):
          - einsum('rpqi,raib,pqab->ir',h2e_v2,h2e_v1,a12)\
          + einsum('rpqi,rabi,pqab->ir',h2e_v2,h2e_v2,a13)
     diff = mc.mo_energy[:mc.ncore,None] - mc.mo_energy[None,mc.ncore+mc.ncas:]
-    return _norm_to_energy(norm, h, -diff, name='Sir')
+    #return _norm_to_energy(norm, h, -diff, name='Sir')
+    return norm_to_energy_multi_thresh(norm, h, -diff, name='Sir', threshs=threshs)
 
 
 class NEVPT(lib.StreamObject):
@@ -614,6 +622,7 @@ class NEVPT(lib.StreamObject):
         self._mc = mc
         self.root = root
         self.compressed_mps = False
+        self.threshs = (NUMERICAL_ZERO,)
 
 ##################################################
 # don't modify the following attributes, they are not input options
@@ -810,15 +819,15 @@ class NEVPT(lib.StreamObject):
         else:
             isubspace+=1
             print '\t{}/{}'.format(isubspace, nsubspace)
-            norm_Sr   , e_Sr    = Sr(self, self.load_ci(), dms, eris)
-            logger.note(self, "Sr    (-1)',   E = %.14f",  e_Sr  )
-            logger.note(self, "Sr    (-1)',   N = %.14f",  norm_Sr  )
+            norm_Sr   , e_Sr    = Sr(self, self.load_ci(), dms, eris, threshs=self.threshs)
+            logger.note(self, "Sr    (-1)',   E = {}".format(" ".join("{:.14f}".format(x) for x in e_Sr)))
+            logger.note(self, "Sr    (-1)',   N = {}".format(" ".join("{:.14f}".format(x) for x in norm_Sr)))
             time1 = log.timer("space Sr (-1)'", *time1)
             isubspace+=1
             print '\t{}/{}'.format(isubspace, nsubspace)
-            norm_Si   , e_Si    = Si(self, self.load_ci(), dms, eris)
-            logger.note(self, "Si    (+1)',   E = %.14f",  e_Si  )
-            logger.note(self, "Si    (+1)',   N = %.14f",  norm_Si  )
+            norm_Si   , e_Si    = Si(self, self.load_ci(), dms, eris, threshs=self.threshs)
+            logger.note(self, "Si    (+1)',   E = {}".format(" ".join("{:.14f}".format(x) for x in e_Si)))
+            logger.note(self, "Si    (+1)',   N = {}".format(" ".join("{:.14f}".format(x) for x in norm_Si)))
             time1 = log.timer("space Si (+1)'", *time1)
         isubspace+=1
         print '\t{}/{}'.format(isubspace, nsubspace)
@@ -828,37 +837,37 @@ class NEVPT(lib.StreamObject):
         time1 = log.timer('space Sijrs (0)', *time1)
         isubspace+=1
         print '\t{}/{}'.format(isubspace, nsubspace)
-        norm_Sijr , e_Sijr  = Sijr(self, dms, eris)
-        logger.note(self, "Sijr  (+1) ,   E = %.14f",  e_Sijr)
-        logger.note(self, "Sijr  (+1) ,   N = %.14f",  norm_Sijr)
+        norm_Sijr , e_Sijr  = Sijr(self, dms, eris, threshs=self.threshs)
+        logger.note(self, "Sijr  (+1) ,   E = {}".format(" ".join("{:.14f}".format(x) for x in e_Sijr)))
+        logger.note(self, "Sijr  (+1) ,   N = {}".format(" ".join("{:.14f}".format(x) for x in norm_Sijr)))
         time1 = log.timer('space Sijr (+1)', *time1)
         isubspace+=1
         print '\t{}/{}'.format(isubspace, nsubspace)
-        norm_Srsi , e_Srsi  = Srsi(self, dms, eris)
-        logger.note(self, "Srsi  (-1) ,   E = %.14f",  e_Srsi)
-        logger.note(self, "Srsi  (-1) ,   N = %.14f",  norm_Srsi)
+        norm_Srsi , e_Srsi  = Srsi(self, dms, eris, threshs=self.threshs)
+        logger.note(self, "Srsi  (-1) ,   E = {}".format(" ".join("{:.14f}".format(x) for x in e_Srsi)))
+        logger.note(self, "Srsi  (-1) ,   N = {}".format(" ".join("{:.14f}".format(x) for x in norm_Srsi)))
+        time1 = log.timer('space Srsi (-1)', *time1)
         isubspace+=1
         print '\t{}/{}'.format(isubspace, nsubspace)
-        time1 = log.timer('space Srsi (-1)', *time1)
-        norm_Srs  , e_Srs   = Srs(self, dms, eris)
-        logger.note(self, "Srs   (-2) ,   E = %.14f",  e_Srs )
-        logger.note(self, "Srs   (-2) ,   N = %.14f",  norm_Srs )
+        norm_Srs  , e_Srs   = Srs(self, dms, eris, threshs=self.threshs)
+        logger.note(self, "Srs   (-2) ,   E = {}".format(" ".join("{:.14f}".format(x) for x in e_Srs)))
+        logger.note(self, "Srs   (-2) ,   N = {}".format(" ".join("{:.14f}".format(x) for x in norm_Srs)))
         time1 = log.timer('space Srs (-2)', *time1)
         isubspace+=1
         print '\t{}/{}'.format(isubspace, nsubspace)
-        norm_Sij  , e_Sij   = Sij(self, dms, eris)
-        logger.note(self, "Sij   (+2) ,   E = %.14f",  e_Sij )
-        logger.note(self, "Sij   (+2) ,   N = %.14f",  norm_Sij )
+        norm_Sij  , e_Sij   = Sij(self, dms, eris, threshs=self.threshs)
+        logger.note(self, "Sij   (+2) ,   E = {}".format(" ".join("{:.14f}".format(x) for x in e_Sij)))
+        logger.note(self, "Sij   (+2) ,   N = {}".format(" ".join("{:.14f}".format(x) for x in norm_Sij)))
         time1 = log.timer('space Sij (+2)', *time1)
         isubspace+=1
         print '\t{}/{}'.format(isubspace, nsubspace)
-        norm_Sir  , e_Sir   = Sir(self, dms, eris)
-        logger.note(self, "Sir   (0)' ,   E = %.14f",  e_Sir )
-        logger.note(self, "Sir   (0)' ,   N = %.14f",  norm_Sir )
+        norm_Sir  , e_Sir   = Sir(self, dms, eris, threshs=self.threshs)
+        logger.note(self, "Sir   (0)' ,   E = {}".format(" ".join("{:.14f}".format(x) for x in e_Sir)))
+        logger.note(self, "Sir   (0)' ,   N = {}".format(" ".join("{:.14f}".format(x) for x in norm_Sir)))
         time1 = log.timer("space Sir (0)'", *time1)
 
-        nevpt_e  = e_Sr + e_Si + e_Sijrs + e_Sijr + e_Srsi + e_Srs + e_Sij + e_Sir
-        logger.note(self, "Nevpt2 Energy = %.15f", nevpt_e)
+        nevpt_e  = numpy.array(e_Sr) + e_Si + e_Sijrs + e_Sijr + e_Srsi + e_Srs + e_Sij + e_Sir
+        logger.note(self, "Nevpt2 Energy = {}".format(' '.join('{:.14f}'.format(x) for x in nevpt_e)))
         log.timer('SC-NEVPT2', *time0)
 
         self.e_corr = nevpt_e
@@ -941,6 +950,14 @@ def _norm_to_energy(norm, h, diff, name=None, thresh=NUMERICAL_ZERO):
     ener_t = -(norm / (diff + h/norm)).sum()
     norm_t = norm.sum()
     return norm_t, ener_t
+
+def norm_to_energy_multi_thresh(norm, h, diff, name=None, threshs=(NUMERICAL_ZERO,)):
+    norms, eners = [], []
+    for thresh in threshs:
+        n, e = _norm_to_energy(norm, h, diff, name=None, thresh=thresh)
+        norms.append(n)
+        eners.append(e)
+    return norms, eners
 
 def dE_dnorm(norm, h, diff, thresh=NUMERICAL_ZERO):
     idx = abs(norm) > thresh
