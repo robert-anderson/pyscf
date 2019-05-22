@@ -1,4 +1,3 @@
-import pyscf_interface
 import pyscf
 import pickle, os
 import numpy as np
@@ -6,13 +5,16 @@ import shutil
 from pyscf import mcscf, gto, scf, mrpt, ao2mo, fciqmcscf
 einsum = mrpt.nevpt2.einsum
 
-def output_fcidump(casci, mol, dirname=None):
+def output_fcidump(casci, mol, dirname=None, orb_sort=None):
     tmp = casci.fcisolver
     casci.fcisolver = fciqmcscf.FCIQMCCI(mol)
     casci.fcisolver.only_ints = 1
-    try: casci.kernel()
-    except TypeError: pass
-    if dirname is not None: shutil.move('FCIDUMP', '{}/FCIDUMP'.format(dirname))
+    try:
+        if orb_sort is None: casci.kernel()
+        else: casci.kernel(casci.sort_mo(orb_sort, casci.mo_coeff))
+    except TypeError:
+        pass
+    if dirname not in (None, '.'): shutil.move('FCIDUMP', '{}/FCIDUMP'.format(dirname))
     casci.fcisolver = tmp
 
 class SerializableNevpt2:
@@ -21,7 +23,11 @@ class SerializableNevpt2:
     hf_mo_energy = None
     casci_canon_mo = None
     casci_mo_energy = None
-    def __init__(self, fciqmc_dir=None, mol_kwargs=None, fname='nevpt2_store.pkl', norb=None, nelecas=None, threshs=(1e-14,)):
+    save_dms=False
+    def __init__(self, fciqmc_dir=None, mol_kwargs=None, fname='nevpt2_store.pkl', 
+			casorbs=None, norb=None, nelecas=None, save_dms=False, threshs=(1e-14,)):
+        self.save_dms = save_dms
+        self.casorbs = casorbs
         if isinstance(mol_kwargs, dict):
             self.mol_kwargs = mol_kwargs
             mol = self.mol()
@@ -30,26 +36,27 @@ class SerializableNevpt2:
             hf.kernel()
             self.hf_canon_mo = hf.mo_coeff
             self.hf_mo_energy = hf.mo_energy
-            casci = mcscf.CASCI(hf, norb, nelecas)
             self.norb, self.nelecas = norb, nelecas
+            if casorbs is not None: self.norb = len(casorbs)
+            casci = mcscf.CASCI(hf, self.norb, self.nelecas)
             if fciqmc_dir is not None:
                 print '### Initial invokation for subsequent FCIQMC RDM sampling'
-                output_fcidump(casci, mol, fciqmc_dir)
+                output_fcidump(casci, mol, fciqmc_dir, orb_sort=casorbs)
+                self.save(fname)
             else:
                 print '### Exact CASCI+NEVPT2 invokation'
-                output_fcidump(casci, mol)
+                output_fcidump(casci, mol, orb_sort=casorbs)
                 casci.kernel()
                 self.casci_canon_mo = casci.mo_coeff
                 self.casci_mo_energy = casci.mo_energy
                 nevpt2 = mrpt.NEVPT(casci)
                 nevpt2.threshs = threshs
-                nevpt2.kernel()
+                nevpt2.kernel(self.save_dms)
+                self.save(fname)
         elif isinstance(fname, str) and os.path.exists(fname):
             self.load(fname)
             mol = self.mol()
             hf = scf.RHF(mol)
-            hf.kernel()
-            #casci = mcscf.CASCI(mol, self.norb, self.nelecas)
             casci = mcscf.CASCI(hf, self.norb, self.nelecas)
             casci.mo_coeff = self.casci_canon_mo if self.casci_canon_mo is not None else self.hf_canon_mo
             casci.mo_energy = self.casci_mo_energy if self.casci_canon_mo is not None else self.hf_mo_energy
@@ -63,13 +70,12 @@ class SerializableNevpt2:
             nevpt2 = mrpt.NEVPT(casci)
             nevpt2.threshs = threshs
             nevpt2.canonicalized = self.casci_canon_mo is not None
-            nevpt2.kernel()
+            nevpt2.kernel(self.save_dms)
         else:
             raise Exception('Neither a mol dict nor a valid path was provided')
-        self.save(fname)
 
     def mol(self):
-        return gto.M(verbose=4, **self.mol_kwargs)
+        return gto.M(**self.mol_kwargs)
 
     def save(self, fname):
         if fname is None: return

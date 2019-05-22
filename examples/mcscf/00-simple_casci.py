@@ -11,16 +11,34 @@ import numpy
 from pyscf import gto, scf, mcscf
 
 mol = gto.M(
-    atom = 'O 0 0 0; O 0 0 1.2',
-    basis = 'ccpvdz',
-    spin = 2)
+    atom = 'N 0 0 0; N 0 0 1.2',
+    basis = '3-21g',
+    verbose=6,
+    spin = 0)
 
 myhf = scf.RHF(mol)
 myhf.kernel()
+myhf.analyze()
 
 # 6 orbitals, 8 electrons
-mycas = mcscf.CASCI(myhf, 6, 8)
+mycas = mcscf.CASCI(myhf, 6, 6)
+print mycas.mo_energy
+mycas.mo_energy = None
 mycas.kernel()
+mycas.mo_energy = None
+from pyscf import mrpt
+mrpt.NEVPT(mycas).kernel()
+
+
+assert 0
+cas_list = [5,6,7,8,9,11]
+mo = mycas.sort_mo(cas_list)
+mycas.mo_coeff = mo
+e1 = mycas.kernel()
+e2 = mycas.kernel(mo)
+
+print e1[0], e2[0], myhf.e_tot
+assert 0
 
 # Natural occupancy in CAS space, Mulliken population etc.
 mycas.verbose = 4
