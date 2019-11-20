@@ -330,7 +330,7 @@ def calc_energy_from_rdms(mol, mo_coeff, one_rdm, two_rdm):
 
     return two_e + one_e + mol.energy_nuc()
 
-def run_standalone(fciqmcci, scf_obj, orbs=None, restart=None):
+def run_standalone(fciqmcci, scf_obj, orbs=None, restart=None, uhf_write_func=None):
     '''Run a standalone NECI calculation for the molecule listed in the
     FCIQMCCI object. The basis to run this calculation in is given by the
     orbs array.
@@ -348,6 +348,8 @@ def run_standalone(fciqmcci, scf_obj, orbs=None, restart=None):
         rdm_energy : float
             Final RDM energy obtained from the NECI output file.
     '''
+    
+    if uhf_write_func is None: uhf_write_func = write_uhf_integrals_neci
 
     if orbs is None:
         orbs = scf_obj.mo_coeff
@@ -400,7 +402,8 @@ def run_standalone(fciqmcci, scf_obj, orbs=None, restart=None):
     # Lookup and return the relevant 1-electron integrals, and print out
     # the FCIDUMP file.
     if tUHF:
-        write_uhf_integrals_neci(fciqmcci,scf_obj,nmo,nelec,orbs,orbsym,tol=tol)
+        #write_uhf_integrals_neci(fciqmcci,scf_obj,nmo,nelec,orbs,orbsym,tol=tol)
+        uhf_write_func(fciqmcci,scf_obj,nmo,nelec,orbs,orbsym,tol=tol)
     else:
         try:
             eri = pyscf.ao2mo.incore.general(scf_obj._eri, (orbs,)*4, compact=False)
@@ -415,8 +418,8 @@ def run_standalone(fciqmcci, scf_obj, orbs=None, restart=None):
         pyscf.tools.fcidump.from_integrals(fciqmcci.integralFile, h, 
                 pyscf.ao2mo.restore(8,eri,nmo), nmo, nelec, fciqmcci.mol.energy_nuc(),
                 fciqmcci.mol.spin, orbsym, tol=tol)
-	if fciqmcci.only_ints:
-		return
+    if fciqmcci.only_ints:
+        return
 
 #    pyscf.tools.fcidump.write_eri(fout, pyscf.ao2mo.restore(8,eri,nmo),
 #                                  nmo, tol=tol)

@@ -749,8 +749,6 @@ class NEVPT(lib.StreamObject):
         nocc = self.ncore + self.ncas
 
         if not hasattr(self.fcisolver, 'nevpt_intermediate') or self.fcisolver.__class__ == fciqmcscf.FCIQMCCI:
-            link_indexa = fci.cistring.gen_linkstr_index(range(self.ncas), self.nelecas[0])
-            link_indexb = fci.cistring.gen_linkstr_index(range(self.ncas), self.nelecas[1])
             aaaa = eris['ppaa'][self.ncore:nocc,self.ncore:nocc].copy()
 
             if self.fcisolver.__class__ == fciqmcscf.FCIQMCCI:
@@ -940,13 +938,24 @@ def _extract_orbs(mc, mo_coeff):
     mo_vir = mo_coeff[:,nocc:]
     return mo_core, mo_cas, mo_vir
 
-def _norm_to_energy(norm, h, diff, name=None, thresh=NUMERICAL_ZERO):
+def _norm_to_energy(norm, h, diff, name=None, norm_thresh=NUMERICAL_ZERO, denom_thresh=None):
     if name is not None:
         save_contractions(name, norm, h, diff)
-    idx = abs(norm) > thresh
+    if denom_thresh is None: denom_thresh = norm_thresh
+
+    size0 = norm.size
+    idx = abs(norm) > norm_thresh
     norm = norm[idx]
     diff = diff[idx]
     h = h[idx]
+    size1 = norm.size
+    idx = abs(diff+h/norm) > denom_thresh
+    norm = norm[idx]
+    diff = diff[idx]
+    h = h[idx]
+    size2 = norm.size
+    print '{} elements -> (norm thresh {}) -> {} elements -> (denom thresh {}) -> {} elements'.format(
+            size0, norm_thresh, size1, denom_thresh, size2)
     ener_t = -(norm / (diff + h/norm)).sum()
     norm_t = norm.sum()
     return norm_t, ener_t
@@ -954,7 +963,7 @@ def _norm_to_energy(norm, h, diff, name=None, thresh=NUMERICAL_ZERO):
 def norm_to_energy_multi_thresh(norm, h, diff, name=None, threshs=(NUMERICAL_ZERO,)):
     norms, eners = [], []
     for thresh in threshs:
-        n, e = _norm_to_energy(norm, h, diff, name=None, thresh=thresh)
+        n, e = _norm_to_energy(norm, h, diff, name=None, norm_thresh=thresh)
         norms.append(n)
         eners.append(e)
     return norms, eners

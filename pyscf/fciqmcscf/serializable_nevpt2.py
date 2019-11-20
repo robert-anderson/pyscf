@@ -5,13 +5,12 @@ import shutil
 from pyscf import mcscf, gto, scf, mrpt, ao2mo, fciqmcscf
 einsum = mrpt.nevpt2.einsum
 
-def output_fcidump(casci, mol, dirname=None, orb_sort=None):
+def output_fcidump(casci, mol, dirname=None):
     tmp = casci.fcisolver
     casci.fcisolver = fciqmcscf.FCIQMCCI(mol)
     casci.fcisolver.only_ints = 1
     try:
-        if orb_sort is None: casci.kernel()
-        else: casci.kernel(casci.sort_mo(orb_sort, casci.mo_coeff))
+        casci.kernel()
     except TypeError:
         pass
     if dirname not in (None, '.'): shutil.move('FCIDUMP', '{}/FCIDUMP'.format(dirname))
@@ -25,7 +24,7 @@ class SerializableNevpt2:
     casci_mo_energy = None
     save_dms=False
     def __init__(self, fciqmc_dir=None, mol_kwargs=None, fname='nevpt2_store.pkl', 
-			casorbs=None, norb=None, nelecas=None, save_dms=False, threshs=(1e-14,)):
+			casorbs=None, norb=None, nelecas=None, save_dms=False, threshs=(1e-14,), analyze=False):
         self.save_dms = save_dms
         self.casorbs = casorbs
         if isinstance(mol_kwargs, dict):
@@ -34,18 +33,21 @@ class SerializableNevpt2:
             hf = scf.RHF(mol)
             hf.conv_tol = 1e-10
             hf.kernel()
+            if analyze: hf.analyze()
             self.hf_canon_mo = hf.mo_coeff
             self.hf_mo_energy = hf.mo_energy
             self.norb, self.nelecas = norb, nelecas
             if casorbs is not None: self.norb = len(casorbs)
             casci = mcscf.CASCI(hf, self.norb, self.nelecas)
+            if casorbs is not None: casci.mo_coeff = casci.sort_mo(casorbs)
+            self.hf_canon_mo = casci.mo_coeff
             if fciqmc_dir is not None:
                 print '### Initial invokation for subsequent FCIQMC RDM sampling'
-                output_fcidump(casci, mol, fciqmc_dir, orb_sort=casorbs)
+                output_fcidump(casci, mol, fciqmc_dir)
                 self.save(fname)
             else:
                 print '### Exact CASCI+NEVPT2 invokation'
-                output_fcidump(casci, mol, orb_sort=casorbs)
+                output_fcidump(casci, mol)
                 casci.kernel()
                 self.casci_canon_mo = casci.mo_coeff
                 self.casci_mo_energy = casci.mo_energy
